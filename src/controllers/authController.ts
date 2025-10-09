@@ -3,6 +3,9 @@ import User from "../models/User";
 import bcrypt from "bcryptjs";
 import generateToken from "../utils/generateToken";
 import { AuthRequest } from "../middleware/authMiddleware";
+import { log } from "console";
+import { Op } from "sequelize";
+import { getUserListWithLastMessage } from "./common";
 
 // Register
 export const registerUser = async (
@@ -11,7 +14,7 @@ export const registerUser = async (
 ): Promise<void> => {
   try {
     const { name, email, password } = req.body;
-    const userExists = await User.findOne({ email });
+    const userExists = await User.findOne({ where: { email } });
     if (userExists) {
       res.status(400).json({ message: "User already exists", status: false });
       return;
@@ -23,12 +26,13 @@ export const registerUser = async (
     });
 
     res.status(201).json({
-      _id: user._id,
+      id: user.id,
       name: user.name,
       email: user.email,
       role: user.role,
-      token: generateToken(user._id.toString()),
+      token: generateToken(user.id.toString()),
       status: true,
+      message:'User registered successfully',
     });
   } catch (error: any) {
     res.status(500).json({ message: error.message, status: false });
@@ -38,8 +42,8 @@ export const registerUser = async (
 export const loginUser = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
-    const user = await User.findOne({ email }).select("+password");
-    console.log("User found:", user); // Debugging line
+    const user = await User.findOne({ where: { email } });
+   
 
     if (!user) {
       res
@@ -59,12 +63,13 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
     }
 
     res.json({
-      _id: user._id,
+      id: user.id,
       name: user.name,
       email: user.email,
       role: user.role,
-      token: generateToken(user._id.toString()),
+      token: generateToken(user.id.toString()),
       status: true,
+      message:'User logged in successfully',
     });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
@@ -77,18 +82,18 @@ export const userProfile = async (
   try {
     const { user } = req;
     if (!user) {
-      res.status(404).json({ msg: "No user found!", status: false });
+      res.status(404).json({ message: "No user found!", status: false });
       return;
     }
     res.status(200).json({
-      msg: "success",
+      message: "success",
       status: true,
       user,
     });
   } catch (err) {
     console.log("ths is error", err);
 
-    res.status(500).json({ msg: "Something went wrong!", status: false });
+    res.status(500).json({ message: "Something went wrong!", status: false });
   }
 };
 export const getUsers = async (
@@ -96,11 +101,19 @@ export const getUsers = async (
   res: Response
 ): Promise<void> => {
   try {
-    const users = await User.find({ _id: { $ne: req.user?._id } }).select(
-      "-password"
-    );
-    res.status(200).json({ users, status: true, msg: "success" });
-  } catch (error) {
-    res.status(500).json({ msg: "Something went wrong!", status: false });
+    const currentUserId = req.user?.id;
+    const users = await getUserListWithLastMessage(currentUserId);
+
+    // const users = await User.findAll({
+    //   where: {
+    //     id: { [Op.ne]: currentUserId }, // exclude current user
+    //   },
+    //   attributes: { exclude: ["password"] }, // don't return password
+    // });
+  
+    res.status(200).json({ users, status: true, message: "success" });
+  } catch (error: any) {
+    console.error(error);
+    res.status(500).json({ message: "Something went wrong!", status: false });
   }
 };

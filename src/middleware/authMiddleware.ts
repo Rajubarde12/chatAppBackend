@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import User, { IUser } from "../models/User";
+import User from "../models/User";
 
 interface JwtPayload {
   id: string;
@@ -8,7 +8,7 @@ interface JwtPayload {
 
 // Extend Request interface to include user
 export interface AuthRequest extends Request {
-  user?: IUser;
+  user?: User;
 }
 
 export const protect = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -21,14 +21,9 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
     try {
       // Extract token from header
       token = req.headers.authorization.split(" ")[1];
-      console.log(token);
-      
-
-      // Verify token
       const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as JwtPayload;
-      console.log("Decoded JWT:", decoded); // Debugging line
-      // Find user by id and exclude password
-      const user = await User.findById(decoded.id).select("-password");
+
+      const user = await User.findByPk(decoded.id,{attributes: { exclude: ['password'] }});
       if (!user) {
         res.status(401).json({ message: "Not authorized" });
         return;

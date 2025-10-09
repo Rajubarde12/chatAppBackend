@@ -1,75 +1,125 @@
 import { Response } from "express";
+import { AuthRequest } from "../middleware/authMiddleware";
 import Chat from "../models/Chat";
 import Message from "../models/Message";
-import { AuthRequest } from "../middleware/authMiddleware";
+import User from "../models/User";
+import { Op } from "sequelize";
 
-// 🟢 Get all chats of logged-in user
-export const getUserChats = async (req: AuthRequest, res: Response) => {
-  try {
-    const chats = await Chat.find({ participants: req.user?._id })
-      .populate("participants", "name email")
-      .populate("lastMessage")
-      .sort({ updatedAt: -1 });
+interface SendMessageData {
+  senderId: number;
+  receiverId: number;
+  message: string;
+  messageType?: "text" | "image" | "video" | "file";
+}
 
-    res.json(chats);
-  } catch (error) {
-    res.status(500).json({ message: "Error fetching chats", error });
+export const sendMessage = async (data: SendMessageData) => {
+  const { senderId, receiverId, message, messageType = "text" } = data;
+
+  // 1️⃣ Find or create chat
+  let chat = await Chat.findOne({
+    include: [
+      {
+        model: User,
+        as: "participants",
+        where: { id: [senderId, receiverId] }, // both participants
+      },
+    ],
+  });
+
+  if (!chat) {
+    chat = await Chat.create();
+    await chat.addParticipants([senderId, receiverId]);
   }
+
+  const newMessage = await Message.create({
+    senderId,
+    receiverId,
+    message,
+    messageType,
+    isRead: false,
+  });
+
+  // 3️⃣ Update lastMessage in chat
+  await Chat.update(
+    { lastMessageId: newMessage.id },
+    { where: { id: chat.id } }
+  );
+
+  return { ...newMessage?.dataValues };
 };
-
-// 🟢 Create or get chat between two users
-export const createOrGetChat = async (req: AuthRequest, res: Response) => {
+export const getChatBetweenUsers = async (req: AuthRequest, res: Response) => {
   try {
-    const { receiverId } = req.body;
+    const { receiverId } = req.params;
+    const myId = req.user?.id;
+    console.log("My ID:", myId, "Receiver ID:", receiverId);
 
-    let chat = await Chat.findOne({
-      participants: { $all: [req.user?._id, receiverId] },
+    if (!myId) return res.status(401).json({ message: "Unauthorized" });
+
+    // 1️⃣ Find chat that has both users as participants
+    const chat = await Chat.findOne({
+      include: [
+        {
+          model: User,
+          as: "participants",
+          where: { id: { [Op.in]: [myId, receiverId] } },
+          attributes: { exclude: ["password"] },
+          through: { attributes: [] }, // don't include junction table
+        },
+        {
+          model: Message,
+          as: "lastMessage",
+        },
+      ],
     });
 
-    if (!chat) {
-      chat = await Chat.create({
-        participants: [req.user?._id, receiverId],
+    if (!chat)
+      return res.status(404).json({ message: "No chat found", status: false });
+
+    // 2️⃣ Fetch all messages between the two users
+    const messages = await Message.findAll({
+      where: {
+        [Op.or]: [
+          { senderId: myId, receiverId: receiverId },
+          { senderId: receiverId, receiverId: myId },
+        ],
+      },
+      order: [["createdAt", "ASC"]],
+    });
+
+    return res
+      .status(200)
+      .json({
+        message: "Chat fetched successfully",
+        status: true,
+        chat,
+        messages,
       });
-    }
-
-    res.json(chat);
   } catch (error) {
-    res.status(500).json({ message: "Error creating chat", error });
+    console.error("Error fetching chat:", error);
+    res.status(500).json({ message: "Something went wrong", status: false });
   }
 };
-
-// 🟢 Get messages of a chat
-export const getMessages = async (req: AuthRequest, res: Response) => {
+export const changeMeesageReadeStatus = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  const { receiverId } = req.params;
+  const myId = req.user?.id;
   try {
-    const messages = await Message.find({ chatId: req.params.chatId })
-      .populate("sender", "name email")
-      .populate("receiver", "name email")
-      .sort({ createdAt: 1 });
+    const [updatedCount] = await Message.update(
+      { isRead: true },
+      {
+        where: {
+          senderId: Number(myId),
+          receiverId: Number(receiverId),
+          isRead: false,
+        },
+      }
+    );
 
-    res.json(messages);
-  } catch (error) {
-    res.status(500).json({ message: "Error fetching messages", error });
-  }
-};
-
-// 🟢 Send message
-export const sendMessage = async (req: AuthRequest, res: Response) => {
-  try {
-    const { receiverId, message, messageType } = req.body;
-
-    const newMessage = await Message.create({
-      chatId: req.params.chatId,
-      sender: req.user?._id,
-      receiver: receiverId,
-      message,
-      messageType: messageType || "text",
-    });
-
-    // update lastMessage in chat
-    await Chat.findByIdAndUpdate(req.params.chatId, { lastMessage: newMessage._id });
-
-    res.json(newMessage);
-  } catch (error) {
-    res.status(500).json({ message: "Error sending message", error });
+    res.json({ success: true, updatedCount });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: "Failed to mark messages as read" });
   }
 };

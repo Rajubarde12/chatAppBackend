@@ -18,6 +18,7 @@
     "@types/express": "^5.0.3",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.6.2",
+    "@types/sequelize": "^4.28.20",
     "@types/socket.io": "^3.0.2",
     "nodemon": "^3.1.10",
     "ts-node": "^10.9.2",
@@ -29,6 +30,9 @@
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.19.0",
+    "mysql2": "^3.15.2",
+    "prettier": "3.6.2",
+    "sequelize": "^6.37.7",
     "socket.io": "^4.8.1"
   },
   "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"

@@ -1,18 +1,45 @@
-import mongoose, { Schema, Document } from "mongoose";
+import { BelongsToManyAddAssociationsMixin, DataTypes, Model, Optional } from "sequelize";
+import sequelize from "../config/db";
+import User from "./User";
+import Message from "./Message";
 
-export interface IChat extends Document {
-  participants: mongoose.Types.ObjectId[];
-  lastMessage?: mongoose.Types.ObjectId;
-  createdAt: Date;
-  updatedAt: Date;
+interface ChatAttributes {
+  id: number;
+  lastMessageId?: number;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
-const chatSchema = new Schema<IChat>(
+interface ChatCreationAttributes extends Optional<ChatAttributes, "id"> {}
+
+class Chat extends Model<ChatAttributes, ChatCreationAttributes> implements ChatAttributes {
+  public id!: number;
+  public lastMessageId?: number;
+  public createdAt!: Date;
+  public updatedAt!: Date;
+
+  public participants?: User[];
+  public lastMessage?: Message;
+  public addParticipants!: BelongsToManyAddAssociationsMixin<User, number>;
+}
+
+Chat.init(
   {
-    participants: [{ type: Schema.Types.ObjectId, ref: "User" }],
-    lastMessage: { type: Schema.Types.ObjectId, ref: "Message" },
+    id: { type: DataTypes.INTEGER.UNSIGNED, autoIncrement: true, primaryKey: true },
+    lastMessageId: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: true,
+      references: { model: "messages", key: "id" },
+    },
   },
-  { timestamps: true }
+  { tableName: "chats", sequelize, timestamps: true }
 );
 
-export default mongoose.model<IChat>("Chat", chatSchema);
+// Associations
+Chat.belongsToMany(User, { through: "ChatParticipants", as: "participants" });
+User.belongsToMany(Chat, { through: "ChatParticipants", as: "chats" });
+
+Chat.belongsTo(Message, { as: "lastMessage", foreignKey: "lastMessageId" });
+Message.hasOne(Chat, { as: "chat", foreignKey: "lastMessageId" });
+
+export default Chat;

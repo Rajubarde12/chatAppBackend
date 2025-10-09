@@ -1,32 +1,80 @@
-import mongoose, { Schema, Document } from "mongoose";
+// models/Message.ts
+import { DataTypes, Model, Optional } from "sequelize";
+import sequelize from "../config/db";
+import User from "./User"; // assuming User model exists
 
-export interface IMessage extends Document {
-  chatId: mongoose.Types.ObjectId;
-  sender: mongoose.Types.ObjectId;
-  receiver: mongoose.Types.ObjectId;
+// 1. Define attributes
+interface MessageAttributes {
+  id: number;
+  senderId: number;
+  receiverId: number;
   message: string;
   messageType: "text" | "image" | "video" | "file";
   attachments?: string[];
   isRead: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt?: Date;
+  updatedAt?: Date;
 }
 
-const messageSchema = new Schema<IMessage>(
+// 2. Attributes needed for creation
+interface MessageCreationAttributes extends Optional<MessageAttributes, "id" | "attachments" | "isRead" | "createdAt" | "updatedAt"> {}
+
+// 3. Model class
+class Message extends Model<MessageAttributes, MessageCreationAttributes> implements MessageAttributes {
+  public id!: number;
+  public senderId!: number;
+  public receiverId!: number;
+  public message!: string;
+  public messageType!: "text" | "image" | "video" | "file";
+  public attachments?: string[];
+  public isRead!: boolean;
+  public readonly createdAt!: Date;
+  public readonly updatedAt!: Date;
+}
+
+// 4. Initialize model
+Message.init(
   {
-    chatId: { type: Schema.Types.ObjectId, ref: "Chat", required: true },
-    sender: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    receiver: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    message: { type: String, required: true },
-    messageType: {
-      type: String,
-      enum: ["text", "image", "video", "file"],
-      default: "text",
+    id: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      autoIncrement: true,
+      primaryKey: true,
     },
-    attachments: [{ type: String }],
-    isRead: { type: Boolean, default: false },
+    senderId: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: false,
+      references: { model: User, key: "id" }, // foreign key to User
+      onDelete: "CASCADE",
+    },
+    receiverId: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: false,
+      references: { model: User, key: "id" }, // foreign key to User
+      onDelete: "CASCADE",
+    },
+    message: { type: DataTypes.TEXT, allowNull: false },
+    messageType: {
+      type: DataTypes.ENUM("text", "image", "video", "file"),
+      defaultValue: "text",
+    },
+    attachments: {
+      type: DataTypes.JSON, // store array of strings as JSON
+      allowNull: true,
+    },
+    isRead: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
   },
-  { timestamps: true }
+  {
+    sequelize,
+    tableName: "messages",
+    timestamps: true, // createdAt & updatedAt
+  }
 );
 
-export default mongoose.model<IMessage>("Message", messageSchema);
+// 5. Associations (optional, if you want to use include)
+Message.belongsTo(User, { as: "sender", foreignKey: "senderId" });
+Message.belongsTo(User, { as: "receiver", foreignKey: "receiverId" });
+
+export default Message;

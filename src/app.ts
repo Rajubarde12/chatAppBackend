@@ -10,6 +10,6 @@ app.use(express.json());
 
 // Routes
 app.use("/api/users", userRoutes);
-app.use("/api/chats", chatRoutes);
+app.use("/api/users/chats", chatRoutes);
 
 export default app;

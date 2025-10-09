@@ -10,6 +10,6 @@ router.post("/register", registerUser);
 // POST /api/auth/login
 router.post("/login", loginUser);
 router.get('/profile',protect,userProfile)
-router.get('/users',protect,getUsers)
+router.get('/list',protect,getUsers)
 
 export default router;

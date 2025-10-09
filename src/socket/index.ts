@@ -1,8 +1,7 @@
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
 import User from "../models/User";
-import Chat from "../models/Chat";
-import Message from "../models/Message";
+import { sendMessage } from "../controllers/chatController";
 
 export const initSocket = (server: any) => {
   const io = new Server(server, {
@@ -15,8 +14,11 @@ export const initSocket = (server: any) => {
       const token = socket.handshake.auth.token;
       if (!token) return next(new Error("Authentication error: No token"));
 
-      const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as { id: string };
-      const user = await User.findById(decoded.id).select("-password");
+      const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as {
+        id: string;
+      };
+      // const user = await User.findById(decoded.id).select("-password");
+      const user = await User.findByPk(decoded.id);
       if (!user) return next(new Error("Authentication error: Invalid user"));
 
       (socket as any).user = user;
@@ -28,30 +30,26 @@ export const initSocket = (server: any) => {
 
   io.on("connection", (socket) => {
     const user = (socket as any).user;
-    console.log("⚡ Authenticated user connected:", user._id);
+    console.log("⚡ Authenticated user connected:", user.id);
+    onlineUsers[user.id] = socket.id;
+    io.emit("userStatusChanged", { userId: user.id, status: "online" });
 
     // Join personal room (userId based)
-    socket.join(user._id.toString());
+    socket.join(user.id.toString());
 
     // 🟢 Send message
     socket.on("sendMessage", async (data) => {
       try {
         const { chatId, receiverId, message, messageType } = data;
-
-        // 1️⃣ Save message to DB
-        const newMessage = await Message.create({
-          chatId,
-          sender: user._id,
-          receiver: receiverId,
+        const newMessage = await sendMessage({
+          senderId: Number(user.id),
+          receiverId: Number(receiverId),
           message,
           messageType: messageType || "text",
         });
-
-        // 2️⃣ Update lastMessage in Chat
-        await Chat.findByIdAndUpdate(chatId, { lastMessage: newMessage._id });
-
-        // 3️⃣ Emit message to receiver
-        io.to(receiverId).emit("newMessage", newMessage);
+   console.log("New message:", newMessage); // Debugging line
+      
+        io.to(receiverId.toString()).emit("newMessage", newMessage);
 
         // 4️⃣ Emit ack to sender
         socket.emit("messageSent", newMessage);
@@ -62,7 +60,11 @@ export const initSocket = (server: any) => {
 
     // Disconnect
     socket.on("disconnect", () => {
-      console.log("❌ User disconnected:", user._id);
+      console.log("❌ User disconnected:", user.id);
+      delete onlineUsers[user.id];
+      io.emit("userStatusChanged", { userId: user.id, status: "offline" });
     });
   });
 };
+
+const onlineUsers: Record<string, string> = {};
