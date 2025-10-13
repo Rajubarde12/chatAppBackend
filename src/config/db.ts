@@ -48,14 +48,6 @@ const sequelize = new Sequelize(
   }
 );
 
-// Test the connection
-export const connectDB = async () => {
-  try {
-    await sequelize.authenticate();
-    console.log("✅ MySQL connected via Sequelize");
-  } catch (error) {
-    console.error("❌ Unable to connect to MySQL:", error);
-  }
-};
+
 
 export default sequelize;

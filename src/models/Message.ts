@@ -12,15 +12,30 @@ interface MessageAttributes {
   messageType: "text" | "image" | "video" | "file";
   attachments?: string[];
   isRead: boolean;
+  isDelivered: boolean;
+  forwardedFromMessageId?: number | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
 
 // 2. Attributes needed for creation
-interface MessageCreationAttributes extends Optional<MessageAttributes, "id" | "attachments" | "isRead" | "createdAt" | "updatedAt"> {}
+interface MessageCreationAttributes
+  extends Optional<
+    MessageAttributes,
+    | "id"
+    | "attachments"
+    | "isRead"
+    | "isDelivered"
+    | "forwardedFromMessageId"
+    | "createdAt"
+    | "updatedAt"
+  > {}
 
 // 3. Model class
-class Message extends Model<MessageAttributes, MessageCreationAttributes> implements MessageAttributes {
+class Message
+  extends Model<MessageAttributes, MessageCreationAttributes>
+  implements MessageAttributes
+{
   public id!: number;
   public senderId!: number;
   public receiverId!: number;
@@ -28,6 +43,8 @@ class Message extends Model<MessageAttributes, MessageCreationAttributes> implem
   public messageType!: "text" | "image" | "video" | "file";
   public attachments?: string[];
   public isRead!: boolean;
+  public isDelivered!: boolean;
+  forwardedFromMessageId?: number | null | undefined;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
 }
@@ -65,6 +82,16 @@ Message.init(
       type: DataTypes.BOOLEAN,
       defaultValue: false,
     },
+    isDelivered: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+    forwardedFromMessageId: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: true,
+      references: { model: "messages", key: "id" },
+      onDelete: "SET NULL",
+    },
   },
   {
     sequelize,
@@ -76,5 +103,9 @@ Message.init(
 // 5. Associations (optional, if you want to use include)
 Message.belongsTo(User, { as: "sender", foreignKey: "senderId" });
 Message.belongsTo(User, { as: "receiver", foreignKey: "receiverId" });
+Message.hasMany(Message, {
+  as: "forwards",
+  foreignKey: "forwardedFromMessageId",
+});
 
 export default Message;

@@ -10,10 +10,11 @@ interface SendMessageData {
   receiverId: number;
   message: string;
   messageType?: "text" | "image" | "video" | "file";
+  isOnline:true|false
 }
 
 export const sendMessage = async (data: SendMessageData) => {
-  const { senderId, receiverId, message, messageType = "text" } = data;
+  const { senderId, receiverId, message, messageType = "text",isOnline } = data;
 
   // 1️⃣ Find or create chat
   let chat = await Chat.findOne({
@@ -37,6 +38,7 @@ export const sendMessage = async (data: SendMessageData) => {
     message,
     messageType,
     isRead: false,
+    isDelivered:isOnline  
   });
 
   // 3️⃣ Update lastMessage in chat
@@ -86,14 +88,12 @@ export const getChatBetweenUsers = async (req: AuthRequest, res: Response) => {
       order: [["createdAt", "ASC"]],
     });
 
-    return res
-      .status(200)
-      .json({
-        message: "Chat fetched successfully",
-        status: true,
-        chat,
-        messages,
-      });
+    return res.status(200).json({
+      message: "Chat fetched successfully",
+      status: true,
+      chat,
+      messages,
+    });
   } catch (error) {
     console.error("Error fetching chat:", error);
     res.status(500).json({ message: "Something went wrong", status: false });
@@ -105,21 +105,52 @@ export const changeMeesageReadeStatus = async (
 ) => {
   const { receiverId } = req.params;
   const myId = req.user?.id;
+
+return res.send({
+  status:null,
+  message:"not worlong re"
+})
+
   try {
     const [updatedCount] = await Message.update(
       { isRead: true },
       {
         where: {
-          senderId: Number(myId),
-          receiverId: Number(receiverId),
+          senderId: Number(receiverId),
+          receiverId: Number(myId),
           isRead: false,
         },
       }
     );
 
-    res.json({ success: true, updatedCount });
+    res.json({ status: true, updatedCount, message: "Updated read status" });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, error: "Failed to mark messages as read" });
+    res
+      .status(500)
+      .json({ status: false, message: "Failed to mark messages as read" });
   }
+};
+
+export const makeMarkeAsReadMessage = async (
+  senderId: number,
+  receiverId: number
+) => {
+  const unreadMessages = await Message.findAll({
+    where: {
+      senderId,
+      receiverId,
+      isRead: false,
+    },
+    attributes: ["id"], // only select IDs
+  });
+  const updatedIds = unreadMessages.map((msg) => msg.id);
+  if (updatedIds.length === 0) return [];
+ await Message.update(
+    { isRead: true },
+    {
+      where: { id: updatedIds },
+    }
+  );
+  return updatedIds;
 };

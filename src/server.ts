@@ -15,7 +15,7 @@ const startServer = async () => {
     console.log("✅ MySQL connected via Sequelize");
 
     // Sync all models
-    await sequelize.sync({ alter: true }); // adds missing columns, keeps data
+    await sequelize.sync(); // adds missing columns, keeps data
     console.log("✅ Database synced");
 
     initSocket(server); // initialize socket

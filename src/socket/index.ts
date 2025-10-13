@@ -1,7 +1,11 @@
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
 import User from "../models/User";
-import { sendMessage } from "../controllers/chatController";
+import {
+  makeMarkeAsReadMessage,
+  sendMessage,
+} from "../controllers/chatController";
+import Message from "../models/Message";
 
 export const initSocket = (server: any) => {
   const io = new Server(server, {
@@ -28,16 +32,25 @@ export const initSocket = (server: any) => {
     }
   });
 
-  io.on("connection", (socket) => {
+  io.on("connection", async (socket) => {
     const user = (socket as any).user;
-    console.log("⚡ Authenticated user connected:", user.id);
     onlineUsers[user.id] = socket.id;
-    io.emit("userStatusChanged", { userId: user.id, status: "online" });
 
-    // Join personal room (userId based)
+    await User.update(
+      { isActive: true, lastLogin: undefined },
+      { where: { id: user.id } }
+    );
+    io.emit("userStatusChanged", { userId: user.id, isActive: true });
+    await Message.update(
+      { isDelivered: true },
+      {
+        where: {
+          receiverId: user.id,
+        },
+      }
+    );
     socket.join(user.id.toString());
 
-    // 🟢 Send message
     socket.on("sendMessage", async (data) => {
       try {
         const { chatId, receiverId, message, messageType } = data;
@@ -46,9 +59,9 @@ export const initSocket = (server: any) => {
           receiverId: Number(receiverId),
           message,
           messageType: messageType || "text",
+          isOnline: onlineUsers[receiverId] ? true : false,
         });
-   console.log("New message:", newMessage); // Debugging line
-      
+
         io.to(receiverId.toString()).emit("newMessage", newMessage);
 
         // 4️⃣ Emit ack to sender
@@ -57,12 +70,28 @@ export const initSocket = (server: any) => {
         console.error("Error sending message:", err);
       }
     });
+    socket.on("readMessage", async (data) => {
+      const userId = user.id;
+      const { receiverId } = data;
+      console.log(userId,receiverId);
+      
+      const messageIds = await makeMarkeAsReadMessage(receiverId, userId); 
+      io.to(receiverId.toString()).emit("readMessagesid", messageIds);
+    });
 
     // Disconnect
-    socket.on("disconnect", () => {
+    socket.on("disconnect", async () => {
       console.log("❌ User disconnected:", user.id);
       delete onlineUsers[user.id];
-      io.emit("userStatusChanged", { userId: user.id, status: "offline" });
+      await User.update(
+        { isActive: false, lastLogin: new Date() },
+        { where: { id: user.id } }
+      );
+      io.emit("userStatusChanged", {
+        userId: user.id,
+        isActive: false,
+        lastLogin: new Date(),
+      });
     });
   });
 };
