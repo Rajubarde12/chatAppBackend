@@ -22,7 +22,7 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
       // Extract token from header
       token = req.headers.authorization.split(" ")[1];
       const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as JwtPayload;
-
+   
       const user = await User.findByPk(decoded.id,{attributes: { exclude: ['password'] }});
       if (!user) {
         res.status(401).json({ message: "Not authorized" });
@@ -32,6 +32,8 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
       req.user = user; // attach user to request
       next();
     } catch (error) {
+      console.log("this is errror",error);
+      
       res.status(401).json({ message: "Not authorized, token failed" });
     }
   }
