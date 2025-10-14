@@ -19,6 +19,12 @@ export const registerUser = async (
       res.status(400).json({ message: "User already exists", status: false });
       return;
     }
+    if (!name || !email || !password) {
+      res
+        .status(442)
+        .json({ message: "All Fields are required", status: false });
+        return
+    }
     const user = await User.create({
       name,
       email,
@@ -32,7 +38,7 @@ export const registerUser = async (
       role: user.role,
       token: generateToken(user.id.toString()),
       status: true,
-      message:'User registered successfully',
+      message: "User registered successfully",
     });
   } catch (error: any) {
     res.status(500).json({ message: error.message, status: false });
@@ -43,7 +49,6 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
     const user = await User.findOne({ where: { email } });
-   
 
     if (!user) {
       res
@@ -69,7 +74,7 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
       role: user.role,
       token: generateToken(user.id.toString()),
       status: true,
-      message:'User logged in successfully',
+      message: "User logged in successfully",
     });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
@@ -110,7 +115,7 @@ export const getUsers = async (
     //   },
     //   attributes: { exclude: ["password"] }, // don't return password
     // });
-  
+
     res.status(200).json({ users, status: true, message: "success" });
   } catch (error: any) {
     console.error(error);
@@ -118,28 +123,27 @@ export const getUsers = async (
   }
 };
 
-
 export const checkUserOnline = async (req: AuthRequest, res: Response) => {
   try {
     const user = await User.findByPk(req.params.userId, {
       attributes: ["isActive", "lastLogin"],
     });
-    if(!user){
+    if (!user) {
       res.status(404).json({
-        message:"No User Found",
-        status:false
-      })
-      return
+        message: "No User Found",
+        status: false,
+      });
+      return;
     }
     res.status(200).json({
-      message:"User active status fetched successfully",
-      data:user,
-      status:true
-    })
+      message: "User active status fetched successfully",
+      data: user,
+      status: true,
+    });
   } catch (error) {
-      res.status(500).json({
-        message:"Internal server error",
-        status:false
-      })
+    res.status(500).json({
+      message: "Internal server error",
+      status: false,
+    });
   }
 };
