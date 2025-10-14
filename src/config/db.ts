@@ -35,6 +35,7 @@ import { Sequelize } from "sequelize";
 import dotenv from "dotenv";
 
 dotenv.config();
+console.log("this is dataBASE NAME", process.env.MYSQL_DATABASE, process.env.MYSQL_USER,  process.env.MYSQL_PASSWORD);
 
 
 const sequelize = new Sequelize(
