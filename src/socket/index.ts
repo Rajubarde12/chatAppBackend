@@ -22,7 +22,7 @@ export const initSocket = (server: any) => {
         id: string;
       };
       // const user = await User.findById(decoded.id).select("-password");
-      const user = await User.findByPk(decoded.id);
+      const user = await User.findByPk(decoded.id,{attributes: { exclude: ["password",] }});
       if (!user) return next(new Error("Authentication error: Invalid user"));
 
       (socket as any).user = user;
@@ -66,6 +66,7 @@ export const initSocket = (server: any) => {
 
         // 4️⃣ Emit ack to sender
         socket.emit("messageSent", newMessage);
+        socket.to(receiverId.toString()).emit("pushNotification", { newMessage, User: user });
       } catch (err) {
         console.error("Error sending message:", err);
       }
