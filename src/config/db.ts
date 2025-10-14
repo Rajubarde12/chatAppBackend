@@ -35,15 +35,15 @@ import { Sequelize } from "sequelize";
 import dotenv from "dotenv";
 
 dotenv.config();
-console.log("thsi is dbanme", process.env.MYSQL_DATABASE)
+
 
 const sequelize = new Sequelize(
   process.env.MYSQL_DATABASE || "testdb",      // database name
-  process.env.MYSQLUSER || "root",        // username
-  process.env.MYSQL_ROOT_PASSWORD || "123456",  // password
+  process.env.MYSQL_USER || "root",        // username
+  process.env.MYSQL_PASSWORD || "123456",  // password
   {
-    host: process.env.MYSQLHOST || "localhost",
-    port: parseInt(process.env.MYSQLPORT || "3306"), // must be number
+    host: process.env.MYSQL_HOST || "localhost",
+    port: parseInt(process.env.MYSQL_PORT || "3306"), // must be number
     dialect: "mysql",
     logging: false, // set to true to see SQL queries
   }
