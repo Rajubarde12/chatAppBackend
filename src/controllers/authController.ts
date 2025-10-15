@@ -147,3 +147,38 @@ export const checkUserOnline = async (req: AuthRequest, res: Response) => {
     });
   }
 };
+
+export const updatePassword = async (req: AuthRequest, res: Response) => {
+  try {
+    const { user } = req;
+    const { oldPassword, newPassword } = req.body;
+    console.log(req.body);
+
+    
+
+    if (!user) {
+      res.status(404).json({ message: "No user found!", status: false });
+      return;
+    }
+
+    // Check if old password matches
+    const isMatch = await user.matchPassword(oldPassword);
+    if (!isMatch) {
+      res
+        .status(400)
+        .json({ message: "Old password is incorrect", status: false });
+      return;
+    }
+
+    // Update to new password
+    user.password = newPassword;
+    await user.save();
+
+    res
+      .status(200)
+      .json({ message: "Password updated successfully", status: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Something went wrong!", status: false });
+  }
+}

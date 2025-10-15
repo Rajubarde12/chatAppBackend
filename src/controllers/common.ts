@@ -2,7 +2,7 @@ import { Op } from "sequelize";
 import User from "../models/User";
 import Message from "../models/Message";
 
-export const getUserListWithLastMessage = async (currentUserId?: number) => {
+export const getUserListWithLastMessage = async (currentUserId?: string) => {
   // 1️⃣ Get all users except current
   const users = await User.findAll({
     where: { id: { [Op.ne]: currentUserId } },

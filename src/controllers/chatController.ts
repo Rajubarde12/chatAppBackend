@@ -6,8 +6,8 @@ import User from "../models/User";
 import { Op } from "sequelize";
 
 interface SendMessageData {
-  senderId: number;
-  receiverId: number;
+  senderId: string;
+  receiverId: string;
   message: string;
   messageType?: "text" | "image" | "video" | "file";
   isOnline:true|false

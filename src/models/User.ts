@@ -91,7 +91,7 @@ import sequelize from "../config/db";
 
 // 1. Define User attributes
 interface UserAttributes {
-  id: number;
+  id:string;
   name: string;
   email: string;
   password: string;
@@ -108,7 +108,7 @@ interface UserCreationAttributes extends Optional<UserAttributes, "id" | "create
 
 // 3. Model class
 class User extends Model<UserAttributes, UserCreationAttributes> implements UserAttributes {
-  public id!: number;
+  public id!: string;
   public name!: string;
   public email!: string;
   public password!: string;
@@ -129,8 +129,8 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
 User.init(
   {
     id: {
-      type: DataTypes.INTEGER.UNSIGNED,
-      autoIncrement: true,
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
     },
     name: { type: DataTypes.STRING(50), allowNull: false },

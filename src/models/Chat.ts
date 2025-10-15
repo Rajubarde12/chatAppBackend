@@ -20,7 +20,7 @@ class Chat extends Model<ChatAttributes, ChatCreationAttributes> implements Chat
 
   public participants?: User[];
   public lastMessage?: Message;
-  public addParticipants!: BelongsToManyAddAssociationsMixin<User, number>;
+  public addParticipants!: BelongsToManyAddAssociationsMixin<User, string>;
 }
 
 Chat.init(

@@ -55,8 +55,8 @@ export const initSocket = (server: any) => {
       try {
         const { chatId, receiverId, message, messageType } = data;
         const newMessage = await sendMessage({
-          senderId: Number(user.id),
-          receiverId: Number(receiverId),
+          senderId: user.id,
+          receiverId: receiverId,
           message,
           messageType: messageType || "text",
           isOnline: onlineUsers[receiverId] ? true : false,

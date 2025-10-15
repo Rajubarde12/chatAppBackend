@@ -6,8 +6,8 @@ import User from "./User"; // assuming User model exists
 // 1. Define attributes
 interface MessageAttributes {
   id: number;
-  senderId: number;
-  receiverId: number;
+  senderId: string;
+  receiverId: string;
   message: string;
   messageType: "text" | "image" | "video" | "file";
   attachments?: string[];
@@ -37,8 +37,8 @@ class Message
   implements MessageAttributes
 {
   public id!: number;
-  public senderId!: number;
-  public receiverId!: number;
+  public senderId!: string;
+  public receiverId!: string;
   public message!: string;
   public messageType!: "text" | "image" | "video" | "file";
   public attachments?: string[];
@@ -58,13 +58,13 @@ Message.init(
       primaryKey: true,
     },
     senderId: {
-      type: DataTypes.INTEGER.UNSIGNED,
+      type: DataTypes.UUID,
       allowNull: false,
       references: { model: User, key: "id" }, // foreign key to User
       onDelete: "CASCADE",
     },
     receiverId: {
-      type: DataTypes.INTEGER.UNSIGNED,
+      type:DataTypes.UUID,
       allowNull: false,
       references: { model: User, key: "id" }, // foreign key to User
       onDelete: "CASCADE",
