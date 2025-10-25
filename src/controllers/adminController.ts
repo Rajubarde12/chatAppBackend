@@ -4,6 +4,8 @@ import { BlockedUser, BlockedUserComplaint } from "../models";
 import { User } from "../models";
 import { Complaint } from "../models";
 import Warning from "../models/Warning";
+import {SuspiciousActivity} from "../models";
+
 export const blockUser = async (req: AuthRequest, res: Response) => {
   try {
     const { user: admin } = req;
@@ -93,7 +95,7 @@ export const unBlockUser = async (req: AuthRequest, res: Response) => {
     blockRecord.unblockedBy = admin?.id;
     blockRecord.isBlocked = false;
     await blockRecord.save();
-    // await blockRecord.destroy();
+
     res
       .status(200)
       .json({ message: "User unblocked successfully", status: true });
@@ -149,7 +151,6 @@ export const handleComplaint = async (req: AuthRequest, res: Response) => {
   const adminId = Admin.id;
   const { action, warningMessage, blockReasonCategory } = req.body || {};
 
-
   try {
     const complaint = await Complaint.findByPk(complaintId);
     if (!complaint) {
@@ -195,9 +196,8 @@ export const handleComplaint = async (req: AuthRequest, res: Response) => {
         attributes: { exclude: ["password"] },
       });
 
-
-        user!.isDisabled = true;
-        user?.save()
+      user!.isDisabled = true;
+      user?.save();
       await BlockedUserComplaint.create({
         blockedUserId: blockedUser.id,
         complaintId: complaint.id,
@@ -217,4 +217,12 @@ export const handleComplaint = async (req: AuthRequest, res: Response) => {
     console.error(err);
     res.status(500).json({ message: "Server error", error: err });
   }
+};
+
+export const getAllSuspisousActivity = (req: AuthRequest, res: Response) => {
+  try {
+    const { user: admin } = req;
+      SuspiciousActivity.findAll()
+  
+  } catch (error) {}
 };

@@ -9,6 +9,7 @@ import path from "path";
 import { adminProtec } from "./middleware/adminauthMiddleWare";
 import { protect } from "./middleware/authMiddleware";
 
+
 dotenv.config();
 
 const app = express();

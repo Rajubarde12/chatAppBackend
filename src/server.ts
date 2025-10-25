@@ -3,6 +3,7 @@ import app from "./app";
 import { initSocket } from "./socket";
 import http from "http";
 import dotenv from "dotenv";
+import "./suspiciousCron"
 
 dotenv.config();
 const PORT = process.env.PORT || 5000;

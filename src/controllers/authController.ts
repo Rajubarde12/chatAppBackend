@@ -6,7 +6,7 @@ import { AuthRequest } from "../middleware/authMiddleware";
 import { log } from "console";
 import { Op } from "sequelize";
 import { getUserListWithLastMessage } from "./common";
-import {BlockedUser} from "../models";
+import { BlockedUser, FailedLoginAttempt, SuspiciousActivity } from "../models";
 
 // Register
 export const registerUser = async (
@@ -66,7 +66,7 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
         message: "You are not autorized for login",
         status: false,
       });
-      return
+      return;
     }
 
     if (!user) {
@@ -76,22 +76,116 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
       return;
     }
     if (user.isDisabled) {
-      const reason = await BlockedUser.findOne({
+      // Check if disabled due to suspicious activity
+      const suspiciousActivity = await SuspiciousActivity.findOne({
         where: { userId: user.id },
-        attributes: ["reason"],
+        order: [["createdAt", "DESC"]],
       });
+
+      if (suspiciousActivity) {
+        const type = suspiciousActivity.type;
+        switch (type) {
+          case "loginAnomaly":
+            res.status(403).json({
+              message:
+                "Your account has been temporarily locked due to multiple failed login attempts.",
+              reason:
+                "Too many incorrect password attempts detected. Please try again later.",
+              status: false,
+            });
+            return;
+
+          case "massReports":
+            res.status(403).json({
+              message:
+                "Your account is under review due to multiple reports from users.",
+              reason:
+                "Mass user reports detected. Please wait for admin review.",
+              status: false,
+            });
+            return;
+
+          case "spam":
+            res.status(403).json({
+              message:
+                "Your account has been temporarily restricted for suspicious messaging activity.",
+              reason: "Possible spam or automated behavior detected.",
+              status: false,
+            });
+            return;
+
+          default:
+            res.status(403).json({
+              message:
+                "Your account is temporarily restricted due to suspicious activity.",
+              reason: "Please contact support or wait for admin review.",
+              status: false,
+            });
+            return;
+        }
+      }
+
+      // Otherwise check if blocked manually by admin
+      const blockedRecord = await BlockedUser.findOne({
+        where: { userId: user.id, isBlocked: true },
+        order: [["blockedAt", "DESC"]],
+        attributes: ["reason", "reasonCategory", "actionTaken", "blockedAt"],
+      });
+
+      if (blockedRecord) {
+        res.status(403).json({
+          message: "You are blocked by admin.",
+          reason: blockedRecord.reason,
+          category: blockedRecord.reasonCategory,
+          actionTaken: blockedRecord.actionTaken,
+          blockedAt: blockedRecord.blockedAt,
+          status: false,
+        });
+        return;
+      }
+
+      // Fallback: Generic block message
       res.status(403).json({
-        mesaage: "You are blocked!",
-        reason: reason?.reason,
+        message: "Your account is currently disabled.",
+        reason: "Please contact support for further details.",
         status: false,
       });
       return;
     }
 
     const isMatch = await user.matchPassword(password);
-    console.log("Password match:", isMatch); // Debugging line
 
     if (!isMatch) {
+      FailedLoginAttempt.create({
+        userId: user.id,
+        ipAddress: req.ip,
+        userAgent: req.headers["user-agent"],
+      });
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+      const failedCount = await FailedLoginAttempt.count({
+        where: {
+          userId: user.id,
+          createdAt: { [Op.gte]: tenMinutesAgo },
+        },
+      });
+      if (failedCount >= 5) {
+        // Mark suspicious activity
+        await SuspiciousActivity.create({
+          userId: user.id,
+          type: "loginAnomaly",
+          details: JSON.stringify({ failedCount, period: "10min" }),
+          status: "actionTaken",
+        });
+        user.isDisabled = true;
+        await user.save();
+        res.status(403).json({
+          message:
+            "Multiple failed login attempts detected. Account temporarily locked.",
+          status: false,
+        });
+        return;
+      }
+
       res
         .status(401)
         .json({ message: "Invalid email or password", status: false });
