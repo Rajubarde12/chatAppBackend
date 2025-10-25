@@ -1,5 +1,5 @@
 import { AuthRequest } from "../middleware/authMiddleware";
-import Complaint from "../models/Complaint";
+import {Complaint} from "../models";
 import { Response } from "express";
 
 export const addComplaint = async (req: AuthRequest, res: Response) => {

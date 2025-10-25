@@ -1,6 +1,6 @@
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
-import User from "../models/User";
+import {User} from "../models";
 import {
   makeMarkeAsReadMessage,
   sendMessage,

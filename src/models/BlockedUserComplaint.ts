@@ -1,12 +1,10 @@
 import { DataTypes, Model, Optional } from "sequelize";
 import sequelize from "../config/db";
-import Complaint from "./Complaint";
-import BlockedUser from "./BlockedUsers";
 
 export interface BlockedUserComplaintAttributes {
   id: number;
-  blockedUserId: number;
-  complaintId: number;
+  blockedUserId: number;  // UUID
+  complaintId: number;    // UUID
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -35,13 +33,13 @@ BlockedUserComplaint.init(
       primaryKey: true,
     },
     blockedUserId: {
-      type: DataTypes.INTEGER.UNSIGNED,
+      type: DataTypes.UUID,
       allowNull: false,
       references: { model: "blocked_users", key: "id" },
       onDelete: "CASCADE",
     },
     complaintId: {
-      type: DataTypes.INTEGER.UNSIGNED,
+      type: DataTypes.UUID,
       allowNull: false,
       references: { model: "complaints", key: "id" },
       onDelete: "CASCADE",

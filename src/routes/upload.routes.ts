@@ -1,7 +1,7 @@
 import express, { Request, Response } from "express";
 import { upload } from "../middleware/upload";
 import { AuthRequest, protect } from "../middleware/authMiddleware";
-import User from "../models/User";
+import {User} from "../models";
 
 const router = express.Router();
 

@@ -1,8 +1,9 @@
 import { Response } from "express";
 import { AuthRequest } from "../middleware/authMiddleware";
-import BlockedUser from "../models/BlockedUsers";
-import User from "../models/User";
-import sequelize from "../config/db";
+import { BlockedUser, BlockedUserComplaint } from "../models";
+import { User } from "../models";
+import { Complaint } from "../models";
+import Warning from "../models/Warning";
 export const blockUser = async (req: AuthRequest, res: Response) => {
   try {
     const { user: admin } = req;
@@ -55,8 +56,6 @@ export const blockUser = async (req: AuthRequest, res: Response) => {
       blockedBy: admin.id,
       reasonCategory: reasonCategory ?? "spam",
       actionTaken,
-      
-      
     });
     await user.save();
     res.status(200).json({
@@ -101,5 +100,121 @@ export const unBlockUser = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error("Error unblocking user:", error);
     res.status(500).json({ message: "Internal server error", status: false });
+  }
+};
+
+export const getAdminComplaintList = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const complaints = await Complaint.findAll({
+      include: [
+        { model: User, as: "reporter", attributes: ["id", "name", "email"] },
+        {
+          model: User,
+          as: "reportedUser",
+          attributes: ["id", "name", "email"],
+        },
+        { model: User, as: "adminUser", attributes: ["id", "name"] },
+        {
+          model: BlockedUser,
+          as: "blockRecords",
+          include: [
+            { model: User, as: "blockedByAdmin", attributes: ["id", "name"] },
+            { model: User, as: "unblockedByAdmin", attributes: ["id", "name"] },
+          ],
+        },
+      ],
+      order: [["createdAt", "DESC"]],
+    });
+
+    res.json({ complaints });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err });
+  }
+};
+
+export const handleComplaint = async (req: AuthRequest, res: Response) => {
+  const { complaintId } = req.params;
+  const { user: Admin } = req;
+  if (!Admin?.id) {
+    res.status(401).json({
+      messag: "Not Autorized ",
+      status: false,
+    });
+    return;
+  }
+  const adminId = Admin.id;
+  const { action, warningMessage, blockReasonCategory } = req.body || {};
+
+
+  try {
+    const complaint = await Complaint.findByPk(complaintId);
+    if (!complaint) {
+      return res.status(404).json({ message: "Complaint not found" });
+    }
+    if (complaint.status !== "pending") {
+      return res.status(400).json({ message: "Complaint already handled" });
+    }
+
+    // Update handledBy
+    complaint.handledBy = adminId;
+
+    if (action === "warn") {
+      complaint.status = "reviewed";
+      complaint.actionTaken = "Warning issued";
+
+      // Create warning record
+      await Warning.create({
+        userId: complaint.reportedUserId,
+        complaintId: complaint.id,
+        adminId: adminId,
+        message:
+          warningMessage ||
+          `You received a warning for complaint: "${complaint.reason}"`,
+        type: "warning",
+        readStatus: false,
+      });
+    } else if (action === "block") {
+      complaint.status = "actionTaken";
+      complaint.actionTaken = "Blocked";
+
+      // Create block record
+      const blockedUser = await BlockedUser.create({
+        userId: complaint.reportedUserId,
+        blockedBy: adminId,
+        reason: complaint.reason,
+        reasonCategory: complaint.category,
+        isBlocked: true,
+        actionTaken: "temporaryBan",
+        blockedAt: new Date(),
+      });
+      const user = await User.findByPk(complaint.reportedUserId, {
+        attributes: { exclude: ["password"] },
+      });
+
+
+        user!.isDisabled = true;
+        user?.save()
+      await BlockedUserComplaint.create({
+        blockedUserId: blockedUser.id,
+        complaintId: complaint.id,
+      });
+    } else if (action === "dismiss") {
+      complaint.status = "dismissed";
+      complaint.actionTaken = "No action";
+    } else {
+      return res.status(400).json({ message: "Invalid action" });
+    }
+
+    // Save complaint updates
+    await complaint.save();
+
+    res.json({ message: "Complaint handled successfully", complaint });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error", error: err });
   }
 };

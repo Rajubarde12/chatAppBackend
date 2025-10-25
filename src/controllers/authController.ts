@@ -6,7 +6,7 @@ import { AuthRequest } from "../middleware/authMiddleware";
 import { log } from "console";
 import { Op } from "sequelize";
 import { getUserListWithLastMessage } from "./common";
-import BlockedUser from "../models/BlockedUsers";
+import {BlockedUser} from "../models";
 
 // Register
 export const registerUser = async (
