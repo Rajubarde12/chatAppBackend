@@ -3,7 +3,11 @@ import dotenv from "dotenv";
 import userRoutes from "./routes/user.routes";
 import chatRoutes from "./routes/chat.routes";
 import uploadRoute from './routes/upload.routes'
+import AdminRoute from './routes/admin.routes'
+import complaintRoute from './routes/complain.routes'
 import path from "path";
+import { adminProtec } from "./middleware/adminauthMiddleWare";
+import { protect } from "./middleware/authMiddleware";
 
 dotenv.config();
 
@@ -12,8 +16,10 @@ app.use(express.json());
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 // Routes
+app.use('/api/admin',adminProtec,AdminRoute)
 app.use("/api/users", userRoutes);
 app.use("/api/users/chats", chatRoutes);
 app.use("/api/users/mediaUpload", uploadRoute);
+app.use("/api/complaints",protect,complaintRoute)
 
 export default app;

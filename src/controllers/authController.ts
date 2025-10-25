@@ -6,6 +6,7 @@ import { AuthRequest } from "../middleware/authMiddleware";
 import { log } from "console";
 import { Op } from "sequelize";
 import { getUserListWithLastMessage } from "./common";
+import BlockedUser from "../models/BlockedUsers";
 
 // Register
 export const registerUser = async (
@@ -13,7 +14,9 @@ export const registerUser = async (
   res: Response
 ): Promise<void> => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, role } = req.body;
+    const adminKey = req.headers.authorization;
+
     const userExists = await User.findOne({ where: { email } });
     if (userExists) {
       res.status(400).json({ message: "User already exists", status: false });
@@ -23,12 +26,19 @@ export const registerUser = async (
       res
         .status(442)
         .json({ message: "All Fields are required", status: false });
-        return
+      return;
+    }
+    if (role == "admin" && adminKey != process.env.ADMIN_SECURITY_KEY) {
+      res
+        .status(401)
+        .json({ message: "You can not egibile for this role", status: false });
+      return;
     }
     const user = await User.create({
       name,
       email,
       password: password,
+      role: role ?? "user",
     });
 
     res.status(201).json({
@@ -48,12 +58,33 @@ export const registerUser = async (
 export const loginUser = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
+    const adminKey = req.headers.authorization;
+
     const user = await User.findOne({ where: { email } });
+    if (user?.role == "admin" && adminKey != process.env.ADMIN_SECURITY_KEY) {
+      res.status(401).json({
+        message: "You are not autorized for login",
+        status: false,
+      });
+      return
+    }
 
     if (!user) {
       res
         .status(401)
         .json({ message: "Invalid email or password", status: false });
+      return;
+    }
+    if (user.isDisabled) {
+      const reason = await BlockedUser.findOne({
+        where: { userId: user.id },
+        attributes: ["reason"],
+      });
+      res.status(403).json({
+        mesaage: "You are blocked!",
+        reason: reason?.reason,
+        status: false,
+      });
       return;
     }
 
@@ -154,8 +185,6 @@ export const updatePassword = async (req: AuthRequest, res: Response) => {
     const { oldPassword, newPassword } = req.body;
     console.log(req.body);
 
-    
-
     if (!user) {
       res.status(404).json({ message: "No user found!", status: false });
       return;
@@ -181,4 +210,31 @@ export const updatePassword = async (req: AuthRequest, res: Response) => {
     console.error(error);
     res.status(500).json({ message: "Something went wrong!", status: false });
   }
-}
+};
+
+export const updateUserProfile = async (req: AuthRequest, res: Response) => {
+  try {
+    const { user } = req;
+    const { name, email, avatar, bio } = req.body;
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found", status: false });
+    }
+
+    if (name) user.name = name;
+    if (email) user.email = email;
+    if (bio) user.bio = bio;
+    if (avatar) user.avatar = avatar;
+
+    await user.save();
+
+    res.status(200).json({
+      message: "Profile updated successfully",
+      status: true,
+      user,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Something went wrong!", status: false });
+  }
+};
