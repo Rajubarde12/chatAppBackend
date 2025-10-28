@@ -4,7 +4,8 @@ import { BlockedUser, BlockedUserComplaint } from "../models";
 import { User } from "../models";
 import { Complaint } from "../models";
 import Warning from "../models/Warning";
-import {SuspiciousActivity} from "../models";
+import { SuspiciousActivity } from "../models";
+import { getAllCompaintsbyuserId } from "../helper/adminHelper";
 
 export const blockUser = async (req: AuthRequest, res: Response) => {
   try {
@@ -131,10 +132,12 @@ export const getAdminComplaintList = async (
       order: [["createdAt", "DESC"]],
     });
 
-    res.json({ complaints });
+    res.json({ complaints, message: "All compaints", status: true });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ message: "Server error", error: err });
+    res
+      .status(500)
+      .json({ message: "Server error", error: err, status: false });
   }
 };
 
@@ -154,10 +157,14 @@ export const handleComplaint = async (req: AuthRequest, res: Response) => {
   try {
     const complaint = await Complaint.findByPk(complaintId);
     if (!complaint) {
-      return res.status(404).json({ message: "Complaint not found" });
+      return res
+        .status(404)
+        .json({ message: "Complaint not found", status: false });
     }
     if (complaint.status !== "pending") {
-      return res.status(400).json({ message: "Complaint already handled" });
+      return res
+        .status(400)
+        .json({ message: "Complaint already handled", status: false });
     }
 
     // Update handledBy
@@ -206,7 +213,7 @@ export const handleComplaint = async (req: AuthRequest, res: Response) => {
       complaint.status = "dismissed";
       complaint.actionTaken = "No action";
     } else {
-      return res.status(400).json({ message: "Invalid action" });
+      return res.status(400).json({ message: "Invalid action", status: false });
     }
 
     // Save complaint updates
@@ -219,10 +226,228 @@ export const handleComplaint = async (req: AuthRequest, res: Response) => {
   }
 };
 
-export const getAllSuspisousActivity = (req: AuthRequest, res: Response) => {
+export const getAllSuspisousActivity = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const data = await SuspiciousActivity.findAll();
+
+    if (!data) {
+      return res.status(404).json({
+        status: false,
+        message: "No data found",
+      });
+    }
+    return res.status(200).json({
+      message: "SuspiciousActivities found",
+      data,
+      status: true,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Server error",
+
+      status: false,
+    });
+  }
+};
+
+export const getComplaintsByUser = async (req: AuthRequest, res: Response) => {
+  const { reportedUserId } = req.params;
+  if (!reportedUserId) {
+    res.status(400).json({
+      message: "reportedUserId is required",
+      status: false,
+    });
+  }
+
+  try {
+    const complaints = await getAllCompaintsbyuserId(reportedUserId);
+    if (complaints.length <= 0) {
+      return res.status(404).json({
+        message: "No Compaints found for this user",
+        status: false,
+      });
+    }
+
+    res.json({
+      status: true,
+      message: "Complaints against this user",
+      complaints,
+    });
+  } catch (err) {
+    console.error(err);
+    res
+      .status(500)
+      .json({ message: "Server error", error: err, status: false });
+  }
+};
+
+export const takeActionSuspiciousActivity = async (
+  req: AuthRequest,
+  res: Response
+) => {
   try {
     const { user: admin } = req;
-      SuspiciousActivity.findAll()
-  
-  } catch (error) {}
+    const { Suspiciousid } = req.params;
+
+    // Validate admin
+    if (!admin?.id) {
+      return res.status(400).json({
+        status: false,
+        message: "You cannot process this.",
+      });
+    }
+
+    // Validate ID
+    if (!Suspiciousid) {
+      return res.status(400).json({
+        status: false,
+        message: "Suspicious ID is required.",
+      });
+    }
+
+    // Fetch suspicious activity
+    const suspicious = await SuspiciousActivity.findByPk(Suspiciousid);
+    if (!suspicious) {
+      return res.status(404).json({
+        message: "No suspicious activity found.",
+        status: false,
+      });
+    }
+
+    // If it's a mass report type
+    if (suspicious.type === "massReports") {
+      const suspiciousUserId = suspicious.userId;
+
+      // Fetch all complaints by that user
+      const complaints = await getAllCompaintsbyuserId(suspiciousUserId);
+
+      return res.status(200).json({
+        message:
+          "There are multiple complaints against this user. Please review carefully.",
+        status: true,
+        data: {
+          suspicious,
+          complaints,
+        },
+      });
+    }
+
+    // Default case
+    return res.status(404).json({
+      message: "No actionable data found.",
+      status: false,
+    });
+  } catch (error) {
+    console.error("Error in takeActionSuspiciousActivity:", error);
+    res.status(500).json({
+      message: "Internal server error.",
+      status: false,
+    });
+  }
+};
+export const updateSuspiciousStatus = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    const { user: admin } = req;
+    const { Suspiciousid } = req.params;
+    const { action } = req.body;
+    // Validate admin
+    if (!admin?.id) {
+      return res.status(400).json({
+        status: false,
+        message: "You cannot process this.",
+      });
+    }
+
+    // Validate ID
+    if (!Suspiciousid) {
+      return res.status(400).json({
+        status: false,
+        message: "Suspicious ID is required.",
+      });
+    }
+
+    // Fetch suspicious activity
+    const suspicious = await SuspiciousActivity.findByPk(Suspiciousid);
+    if (!suspicious) {
+      return res.status(404).json({
+        message: "No suspicious activity found.",
+        status: false,
+      });
+    }
+
+    if (suspicious.type == "massReports") {
+      switch (action) {
+        case "parmanentBlocked": {
+          await SuspiciousActivity.update(
+            { status: "actionTaken", handledBy: admin.id },
+            {
+              where: {
+                id: Suspiciousid,
+              },
+            }
+          );
+          await Complaint.update(
+            { actionTaken: "Permantly blocked", status: "actionTaken" },
+            { where: { reportedUserId: suspicious.userId,status:'pending' } }
+          );
+
+          const blockedUser = await BlockedUser.create({
+            userId: suspicious.userId,
+            blockedBy: admin.id,
+            reason:
+              "You are permanetly blocked becuase many users reported you",
+            reasonCategory: "scam",
+            isBlocked: true,
+            actionTaken: "permanentBan",
+            blockedAt: new Date(),
+          });
+          const user = await User.findByPk(suspicious.userId, {
+            attributes: { exclude: ["password"] },
+          });
+
+          user!.isDisabled = true;
+          user?.save();
+         return res.status(201).json({
+        status:true,
+        message:'Handled this gggg'
+      })
+        }
+        default: {
+          await SuspiciousActivity.update(
+            { status: "reviewed", handledBy: admin.id },
+            {
+              where: {
+                id: Suspiciousid,
+              },
+            }
+          );
+          await Complaint.update(
+            { actionTaken: "Warned this user", status: "reviewed",handledBy:admin.id, },
+            { where: { reportedUserId: suspicious.userId,status:'pending' } }
+          );
+        }
+      }
+      return res.status(201).json({
+        status:true,
+        message:'Handled this activity'
+      })
+    }
+
+    return res.status(404).json({
+      message: "No actionable data found.",
+      status: false,
+    });
+  } catch (error) {
+    console.error("Error in takeActionSuspiciousActivity:", error);
+    res.status(500).json({
+      message: "Internal server error.",
+      status: false,
+    });
+  }
 };
