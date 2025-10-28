@@ -1,21 +1,44 @@
 import { AuthRequest } from "../middleware/authMiddleware";
-import {Complaint} from "../models";
+import { BlockedUser, Complaint } from "../models";
 import { Response } from "express";
 
 export const addComplaint = async (req: AuthRequest, res: Response) => {
   try {
     const { user } = req; // Logged-in user
-    const { reportedUserId, reason, category, evidence } = req.body||{};
+    const { reportedUserId, reason, category, evidence } = req.body || {};
+    if (user?.id == reportedUserId) {
+      return res.status(404).json({
+        message: "Khudko kaise block krega bsdk",
+        status: false,
+      });
+    }
 
     // 1️⃣ Validate input
     if (!reportedUserId || !reason) {
       return res.status(400).json({
         message: "reportedUserId and reason are required.",
-        status:false
+        status: false,
       });
     }
+
+    const blockRecord = await BlockedUser.findOne({
+      where: { userId: reportedUserId },
+      order: [["createdAt", "DESC"]], // 👈 latest record first
+    });
+
+    if (
+      blockRecord?.actionTaken == "permanentBan" ||
+      blockRecord?.actionTaken == "temporaryBan"
+    ) {
+      return res.status(400).json({
+        message:
+          "Action already taken about this user no need to add complaint",
+        status: false,
+      });
+    }
+
     if (!user?.id) {
-      return res.status(401).json({ message: "Unauthorized" ,status:false});
+      return res.status(401).json({ message: "Unauthorized", status: false });
     }
 
     // Optional: validate category
@@ -43,15 +66,14 @@ export const addComplaint = async (req: AuthRequest, res: Response) => {
     // 3️⃣ Send response
     return res.status(201).json({
       message: "Complaint submitted successfully.",
-      status:true,
+      status: true,
       complaint,
-
     });
   } catch (err) {
     console.error(err);
     return res.status(500).json({
       message: "Server error while submitting complaint.",
-      status:false
+      status: false,
     });
   }
 };

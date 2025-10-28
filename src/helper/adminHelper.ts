@@ -6,7 +6,7 @@ export const getAllCompaintsbyuserId = async (
   onlyLast24Hours: boolean = false
 ) => {
   try {
-    let whereCondition: any = {
+    const whereCondition: any = {
       reportedUserId,
       status: "pending",
     };
@@ -15,14 +15,12 @@ export const getAllCompaintsbyuserId = async (
       const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
       whereCondition.createdAt = { [Op.gte]: last24Hours };
     }
+
     const complaints = await Complaint.findAll({
+      where: whereCondition,
       include: [
         { model: User, as: "reporter", attributes: ["id", "name", "email"] },
-        {
-          model: User,
-          as: "reportedUser",
-          attributes: ["id", "name", "email"],
-        },
+        { model: User, as: "reportedUser", attributes: ["id", "name", "email"] },
         { model: User, as: "adminUser", attributes: ["id", "name"] },
         {
           model: BlockedUser,
@@ -33,11 +31,12 @@ export const getAllCompaintsbyuserId = async (
           ],
         },
       ],
-      where: whereCondition,
       order: [["createdAt", "DESC"]],
     });
+
     return complaints;
   } catch (err) {
+    console.error("getAllCompaintsbyuserId error:", err);
     return [];
   }
 };

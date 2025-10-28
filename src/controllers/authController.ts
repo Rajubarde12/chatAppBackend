@@ -6,7 +6,12 @@ import { AuthRequest } from "../middleware/authMiddleware";
 import { log } from "console";
 import { Op } from "sequelize";
 import { getUserListWithLastMessage } from "./common";
-import { BlockedUser, FailedLoginAttempt, SuspiciousActivity } from "../models";
+import {
+  BlockedUser,
+  Complaint,
+  FailedLoginAttempt,
+  SuspiciousActivity,
+} from "../models";
 
 // Register
 export const registerUser = async (
@@ -81,6 +86,26 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
         where: { userId: user.id },
         order: [["createdAt", "DESC"]],
       });
+      const blockRecord = await BlockedUser.findOne({
+        where: { userId: user?.id },
+        order: [["createdAt", "DESC"]], // 👈 latest record first
+      });
+      if (blockRecord?.actionTaken == "permanentBan") {
+        res.status(200).json({
+          message: "Your Blocked permanenlty please contect admin support!",
+          reason: blockRecord.reason,
+          status:false
+        });
+        return;
+      }
+      if(blockRecord?.actionTaken=='temporaryBan'){
+         res.status(200).json({
+          message: "Your Blocked permanenlty please contect admin support!",
+          reason: blockRecord.reason,
+          status:false
+        });
+        return;
+      }
 
       if (suspiciousActivity) {
         const type = suspiciousActivity.type;

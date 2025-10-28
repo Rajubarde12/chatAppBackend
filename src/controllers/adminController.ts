@@ -6,145 +6,168 @@ import { Complaint } from "../models";
 import Warning from "../models/Warning";
 import { SuspiciousActivity } from "../models";
 import { getAllCompaintsbyuserId } from "../helper/adminHelper";
+import sequelize from "../config/db";
 
 export const getUser = async (req: AuthRequest, res: Response) => {
   try {
     const { user: admin } = req;
-    if (!admin) {
-      res.status(404).json({
-        message: "You are not eliginble to show the detials",
-        status: false,
+    if (!admin?.id) {
+      return res.status(401).json({
+        success: false,
+        message: "Not authorized to access user details",
       });
-      return;
     }
-    const { userId } = req.params || {};
 
+    const { userId } = req.params || {};
     if (!userId) {
-      res.status(404).json({
-        message: "user id is requried",
-        status: false,
+      return res.status(400).json({
+        success: false,
+        message: "userId is required",
       });
-      return;
     }
+
     const user = await User.findByPk(userId, {
       attributes: { exclude: ["password"] },
     });
+
     if (!user) {
       return res.status(404).json({
+        success: false,
         message: "User not found with this user id",
-        status: false,
       });
-    }
-    return res.status(200).json({
-      message: "Data of the user",
-      status: true,
-      data: {
-        user,
-      },
-    });
-  } catch (errr) {
-    res.status(500).json({
-      message: "something went wrong",
-      status: false,
-    });
-  }
-};
-export const blockUser = async (req: AuthRequest, res: Response) => {
-  try {
-    const { user: admin } = req;
-    if (!admin) {
-      res.status(404).json({
-        message: "Your not elagible for update",
-        status: false,
-      });
-      return;
-    }
-    const { userId } = req.params || {};
-    const { reason, reasonCategory, actionTaken } = req.body;
-    if (!reason) {
-      res.status(404).json({
-        message: "reason  is requried",
-        status: false,
-      });
-      return;
     }
 
-    if (!userId) {
-      res.status(404).json({
-        message: "user id is requried",
-        status: false,
-      });
-      return;
-    }
-    const user = await User.findByPk(userId, {
-      attributes: { exclude: ["password"] },
+    return res.status(200).json({
+      success: true,
+      message: "User data fetched successfully",
+      data: { user },
     });
-    if (!user) {
-      res.status(404).json({
-        message: "user not found!",
-        status: false,
-      });
-      return;
-    }
-    if (user?.isDisabled) {
-      res.status(403).json({
-        message: "User is Already Blocked",
-        status: false,
-      });
-      return;
-    }
-    user.isDisabled = true;
-    const bloceUse = await BlockedUser.create({
-      reason,
-      isBlocked: true,
-      userId,
-      blockedBy: admin.id,
-      reasonCategory: reasonCategory ?? "spam",
-      actionTaken,
-    });
-    await user.save();
-    res.status(200).json({
-      message: "user is blocked",
-      reason: bloceUse.reason,
-      user,
-    });
-  } catch (errr) {
-    res.status(500).json({
-      message: "something went wrong",
-      status: false,
+  } catch (err) {
+    console.error("getUser error:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
     });
   }
 };
+
+export const blockUser = async (req: AuthRequest, res: Response) => {
+  const { user: admin } = req;
+  if (!admin?.id) {
+    return res.status(401).json({ success: false, message: "Not authorized" });
+  }
+
+  const { userId } = req.params || {};
+  const { reason, reasonCategory, actionTaken } = req.body || {};
+
+  if (!userId) {
+    return res
+      .status(400)
+      .json({ success: false, message: "userId is required" });
+  }
+
+  if (!reason) {
+    return res
+      .status(400)
+      .json({ success: false, message: "reason is required" });
+  }
+
+  const t = await sequelize.transaction();
+  try {
+    const user = await User.findByPk(userId, { transaction: t });
+    if (!user) {
+      await t.rollback();
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    if (user.isDisabled) {
+      await t.rollback();
+      return res
+        .status(400)
+        .json({ success: false, message: "User is already blocked" });
+    }
+
+    // create block record
+    const blockRecord = await BlockedUser.create(
+      {
+        reason,
+        isBlocked: true,
+        userId,
+        blockedBy: admin.id,
+        reasonCategory: reasonCategory ?? "spam",
+        actionTaken: actionTaken ?? "temporaryBan",
+        blockedAt: new Date(),
+      },
+      { transaction: t }
+    );
+
+    // disable user
+    user.isDisabled = true;
+    await user.save({ transaction: t });
+
+    // commit
+    await t.commit();
+
+    return res.status(200).json({
+      success: true,
+      message: "User blocked successfully",
+      data: { blockRecord, user },
+    });
+  } catch (err) {
+    console.error("blockUser error:", err);
+    await t.rollback();
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
+  }
+};
+
 export const unBlockUser = async (req: AuthRequest, res: Response) => {
   const { user: admin } = req;
+  if (!admin?.id) {
+    return res.status(401).json({ success: false, message: "Not authorized" });
+  }
+
   const { userId } = req.params;
+  if (!userId) {
+    return res
+      .status(400)
+      .json({ success: false, message: "userId is required" });
+  }
+
   try {
     const blockRecord = await BlockedUser.findOne({
       where: { userId, isBlocked: true },
       order: [["createdAt", "DESC"]],
     });
+
     if (!blockRecord) {
-      res
+      return res
         .status(404)
-        .json({ message: "Block record not found", status: false });
-      return;
+        .json({ success: false, message: "Block record not found" });
     }
+
     const userToUnblock = await User.findByPk(userId);
     if (userToUnblock) {
       userToUnblock.isDisabled = false;
       await userToUnblock.save();
     }
+
     blockRecord.unblockedAt = new Date();
-    blockRecord.unblockedBy = admin?.id;
+    blockRecord.unblockedBy = admin.id;
     blockRecord.isBlocked = false;
     await blockRecord.save();
 
-    res
+    return res
       .status(200)
-      .json({ message: "User unblocked successfully", status: true });
+      .json({ success: true, message: "User unblocked successfully" });
   } catch (error) {
-    console.error("Error unblocking user:", error);
-    res.status(500).json({ message: "Internal server error", status: false });
+    console.error("unBlockUser error:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Internal server error" });
   }
 };
 
@@ -154,14 +177,11 @@ export const getAdminComplaintList = async (
 ) => {
   try {
     const { status } = req.params || {};
-    let whereCondition = {} as {
-      status: string;
-    };
-    if (status) {
-      whereCondition.status = status;
-    }
+    const whereCondition: any = {};
+    if (status) whereCondition.status = status;
 
     const complaints = await Complaint.findAll({
+      where: whereCondition,
       include: [
         { model: User, as: "reporter", attributes: ["id", "name", "email"] },
         {
@@ -180,25 +200,24 @@ export const getAdminComplaintList = async (
         },
       ],
       order: [["createdAt", "DESC"]],
-      where: whereCondition,
     });
-if (!complaints || complaints.length === 0) {
-  return res.json({
-    success: false,
-    complaints,
-    message: `No${status ? ` ${status}` : ""} complaints found.`,
-  });
-}
-    res.json({
-      message: `Found ${complaints.length} ${status ? `${status} ` : ""}complaint${complaints.length !== 1 ? "s" : ""}.`,
+
+    if (!complaints || complaints.length === 0) {
+      return res.status(200).json({
+        success: true,
+        complaints: [],
+        message: `No${status ? ` ${status}` : ""} complaints found.`,
+      });
+    }
+
+    return res.status(200).json({
       success: true,
+      message: `Found ${complaints.length} ${status ? `${status} ` : ""}complaint${complaints.length !== 1 ? "s" : ""}.`,
       complaints,
     });
   } catch (err) {
-    console.error(err);
-    res
-      .status(500)
-      .json({ message: "Server error", error: err, status: false });
+    console.error("getAdminComplaintList error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
@@ -206,84 +225,232 @@ export const handleComplaint = async (req: AuthRequest, res: Response) => {
   const { complaintId } = req.params;
   const { user: Admin } = req;
   if (!Admin?.id) {
-    res.status(401).json({
-      messag: "Not Autorized ",
-      status: false,
-    });
-    return;
+    return res.status(401).json({ success: false, message: "Not authorized" });
   }
+
   const adminId = Admin.id;
   const { action, warningMessage, blockReasonCategory } = req.body || {};
 
+  if (!complaintId) {
+    return res
+      .status(400)
+      .json({ success: false, message: "complaintId is required" });
+  }
+
+  const t = await sequelize.transaction();
   try {
-    const complaint = await Complaint.findByPk(complaintId);
+    const complaint = await Complaint.findByPk(complaintId, { transaction: t });
     if (!complaint) {
+      await t.rollback();
       return res
         .status(404)
-        .json({ message: "Complaint not found", status: false });
+        .json({ success: false, message: "Complaint not found" });
     }
     if (complaint.status !== "pending") {
+      await t.rollback();
       return res
         .status(400)
-        .json({ message: "Complaint already handled", status: false });
+        .json({ success: false, message: "Complaint already handled" });
     }
 
-    // Update handledBy
     complaint.handledBy = adminId;
 
     if (action === "warn") {
       complaint.status = "reviewed";
       complaint.actionTaken = "Warning issued";
 
-      // Create warning record
-      await Warning.create({
-        userId: complaint.reportedUserId,
-        complaintId: complaint.id,
-        adminId: adminId,
-        message:
-          warningMessage ||
-          `You received a warning for complaint: "${complaint.reason}"`,
-        type: "warning",
-        readStatus: false,
-      });
+      await Warning.create(
+        {
+          userId: complaint.reportedUserId,
+          complaintId: complaint.id,
+          adminId,
+          message:
+            warningMessage ??
+            `You received a warning for complaint: "${complaint.reason}"`,
+          type: "warning",
+          readStatus: false,
+        },
+        { transaction: t }
+      );
     } else if (action === "block") {
       complaint.status = "actionTaken";
       complaint.actionTaken = "Blocked";
 
-      // Create block record
-      const blockedUser = await BlockedUser.create({
-        userId: complaint.reportedUserId,
-        blockedBy: adminId,
-        reason: complaint.reason,
-        reasonCategory: complaint.category,
-        isBlocked: true,
-        actionTaken: "temporaryBan",
-        blockedAt: new Date(),
-      });
-      const user = await User.findByPk(complaint.reportedUserId, {
-        attributes: { exclude: ["password"] },
-      });
+      const blockedUser = await BlockedUser.create(
+        {
+          userId: complaint.reportedUserId,
+          blockedBy: adminId,
+          reason: complaint.reason,
+          reasonCategory: blockReasonCategory ?? complaint.category,
+          isBlocked: true,
+          actionTaken: "temporaryBan",
+          blockedAt: new Date(),
+        },
+        { transaction: t }
+      );
 
-      user!.isDisabled = true;
-      user?.save();
-      await BlockedUserComplaint.create({
-        blockedUserId: blockedUser.id,
-        complaintId: complaint.id,
+      const user = await User.findByPk(complaint.reportedUserId, {
+        transaction: t,
       });
+      if (user) {
+        user.isDisabled = true;
+        await user.save({ transaction: t });
+      }
+
+      await BlockedUserComplaint.create(
+        {
+          blockedUserId: blockedUser.id,
+          complaintId: complaint.id,
+        },
+        { transaction: t }
+      );
     } else if (action === "dismiss") {
       complaint.status = "dismissed";
       complaint.actionTaken = "No action";
     } else {
-      return res.status(400).json({ message: "Invalid action", status: false });
+      await t.rollback();
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid action" });
     }
 
-    // Save complaint updates
-    await complaint.save();
+    await complaint.save({ transaction: t });
+    await t.commit();
 
-    res.json({ message: "Complaint handled successfully", complaint });
+    return res.status(200).json({
+      success: true,
+      message: "Complaint handled successfully",
+      complaint,
+    });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error", error: err });
+    console.error("handleComplaint error:", err);
+    await t.rollback();
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+export const handleMultipleComplaint = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  const { userId } = req.params;
+  const { user: Admin } = req;
+  if (!Admin?.id) {
+    return res.status(401).json({ success: false, message: "Not authorized" });
+  }
+
+  const adminId = Admin.id;
+  const { action, warningMessage, blockReasonCategory } = req.body || {};
+
+  const t = await sequelize.transaction();
+  try {
+    let complaint = await Complaint.findAll({
+      where: { reportedUserId: userId, status: "pending" },
+      transaction: t,
+    });
+    if (complaint.length <= 0) {
+      await t.rollback();
+      return res.status(404).json({
+        success: false,
+        message: "Complaint not found about this user",
+      });
+    }
+
+    if (action === "warn") {
+      await Warning.create(
+        {
+          userId: userId,
+
+          adminId,
+          message:
+            warningMessage ??
+            `We are warning you that there are multipe user warning you`,
+          type: "warning",
+          readStatus: false,
+        },
+        { transaction: t }
+      );
+      await Complaint.update(
+        {
+          status: "reviewed",
+          handledBy: adminId,
+          actionTaken: "Warning issued",
+        },
+        {
+          where: {
+            reportedUserId: userId,
+            status: "pending",
+          },
+          transaction: t,
+        }
+      );
+    } else if (action === "block") {
+      await Complaint.update(
+        {
+          status: "actionTaken",
+          handledBy: adminId,
+          actionTaken: "Blocked",
+        },
+        {
+          where: {
+            reportedUserId: userId,
+            status: "pending",
+          },
+          transaction: t,
+        }
+      );
+      const blockedUser = await BlockedUser.create(
+        {
+          userId: userId,
+          blockedBy: adminId,
+          reason: "You are blockde becuase mutliple users waned you",
+          reasonCategory: blockReasonCategory,
+          isBlocked: true,
+          actionTaken: "permanentBan",
+          blockedAt: new Date(),
+        },
+        { transaction: t }
+      );
+
+      const user = await User.findByPk(userId, {
+        transaction: t,
+      });
+      if (user) {
+        user.isDisabled = true;
+        await user.save({ transaction: t });
+      }
+    } else if (action === "dismiss") {
+      await Complaint.update(
+        {
+          status: "dismissed",
+          handledBy: adminId,
+          actionTaken: "no action taken",
+        },
+        {
+          where: {
+            reportedUserId: userId,
+            status: "pending",
+          },
+          transaction: t,
+        }
+      );
+    } else {
+      await t.rollback();
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid action" });
+    }
+
+    await t.commit();
+
+    return res.status(200).json({
+      success: true,
+      message: "Complaint handled successfully",
+      complaint,
+    });
+  } catch (err) {
+    console.error("handleComplaint error:", err);
+    await t.rollback();
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
@@ -315,35 +482,40 @@ export const getAllSuspisousActivity = async (
 };
 
 export const getComplaintsByUser = async (req: AuthRequest, res: Response) => {
-  const { reportedUserId,last24hours } = req.params;
-  if (!reportedUserId) {
-    res.status(400).json({
-      message: "reportedUserId is required",
-      status: false,
-    });
-  }
-
   try {
-    const complaints = await getAllCompaintsbyuserId(reportedUserId);
-    if (complaints.length <= 0) {
-      return res.status(404).json({
-        message: "No Compaints found for this user",
-        status: false,
+    const { reportedUserId } = req.query;
+
+    const last24hours = req.query.last24hours === "true";
+
+    if (!reportedUserId) {
+      return res
+        .status(400)
+        .json({ success: false, message: "reportedUserId is required" });
+    }
+
+    // pass the optional flag to helper
+    const complaints = await getAllCompaintsbyuserId(
+      String(reportedUserId),
+      last24hours
+    );
+
+    if (!complaints || complaints.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "No complaints found for this user",
+        complaints: [],
       });
     }
 
-    res.json({
-      last24hours,
-      status: true,
+    return res.status(200).json({
+      success: true,
       message: "Complaints against this user",
       complaints,
-      
+      meta: { count: complaints.length, last24hours },
     });
   } catch (err) {
-    console.error(err);
-    res
-      .status(500)
-      .json({ message: "Server error", error: err, status: false });
+    console.error("getComplaintsByUser error:", err);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
@@ -526,4 +698,3 @@ export const updateSuspiciousStatus = async (
     });
   }
 };
-
