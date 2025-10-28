@@ -32,7 +32,7 @@ cron.schedule("*/1 * * * *", async () => {
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const flaggedUsers = await Complaint.findAll({
     attributes: ["reportedUserId"],
-    where: { createdAt: { [Op.gte]: yesterday } },
+    where: { createdAt: { [Op.gte]: yesterday ,},status:'pending' },
     group: ["reportedUserId"],
     having: sequelize.literal("COUNT(*) > 5"),
   });

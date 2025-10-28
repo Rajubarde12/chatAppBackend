@@ -7,6 +7,48 @@ import Warning from "../models/Warning";
 import { SuspiciousActivity } from "../models";
 import { getAllCompaintsbyuserId } from "../helper/adminHelper";
 
+export const getUser = async (req: AuthRequest, res: Response) => {
+  try {
+    const { user: admin } = req;
+    if (!admin) {
+      res.status(404).json({
+        message: "You are not eliginble to show the detials",
+        status: false,
+      });
+      return;
+    }
+    const { userId } = req.params || {};
+
+    if (!userId) {
+      res.status(404).json({
+        message: "user id is requried",
+        status: false,
+      });
+      return;
+    }
+    const user = await User.findByPk(userId, {
+      attributes: { exclude: ["password"] },
+    });
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found with this user id",
+        status: false,
+      });
+    }
+    return res.status(200).json({
+      message: "Data of the user",
+      status: true,
+      data: {
+        user,
+      },
+    });
+  } catch (errr) {
+    res.status(500).json({
+      message: "something went wrong",
+      status: false,
+    });
+  }
+};
 export const blockUser = async (req: AuthRequest, res: Response) => {
   try {
     const { user: admin } = req;
@@ -111,6 +153,14 @@ export const getAdminComplaintList = async (
   res: Response
 ) => {
   try {
+    const { status } = req.params || {};
+    let whereCondition = {} as {
+      status: string;
+    };
+    if (status) {
+      whereCondition.status = status;
+    }
+
     const complaints = await Complaint.findAll({
       include: [
         { model: User, as: "reporter", attributes: ["id", "name", "email"] },
@@ -130,9 +180,20 @@ export const getAdminComplaintList = async (
         },
       ],
       order: [["createdAt", "DESC"]],
+      where: whereCondition,
     });
-
-    res.json({ complaints, message: "All compaints", status: true });
+if (!complaints || complaints.length === 0) {
+  return res.json({
+    success: false,
+    complaints,
+    message: `No${status ? ` ${status}` : ""} complaints found.`,
+  });
+}
+    res.json({
+      message: `Found ${complaints.length} ${status ? `${status} ` : ""}complaint${complaints.length !== 1 ? "s" : ""}.`,
+      success: true,
+      complaints,
+    });
   } catch (err) {
     console.error(err);
     res
@@ -254,7 +315,7 @@ export const getAllSuspisousActivity = async (
 };
 
 export const getComplaintsByUser = async (req: AuthRequest, res: Response) => {
-  const { reportedUserId } = req.params;
+  const { reportedUserId,last24hours } = req.params;
   if (!reportedUserId) {
     res.status(400).json({
       message: "reportedUserId is required",
@@ -272,9 +333,11 @@ export const getComplaintsByUser = async (req: AuthRequest, res: Response) => {
     }
 
     res.json({
+      last24hours,
       status: true,
       message: "Complaints against this user",
       complaints,
+      
     });
   } catch (err) {
     console.error(err);
@@ -394,7 +457,7 @@ export const updateSuspiciousStatus = async (
           );
           await Complaint.update(
             { actionTaken: "Permantly blocked", status: "actionTaken" },
-            { where: { reportedUserId: suspicious.userId,status:'pending' } }
+            { where: { reportedUserId: suspicious.userId, status: "pending" } }
           );
 
           const blockedUser = await BlockedUser.create({
@@ -413,10 +476,10 @@ export const updateSuspiciousStatus = async (
 
           user!.isDisabled = true;
           user?.save();
-         return res.status(201).json({
-        status:true,
-        message:'Handled this gggg'
-      })
+          return res.status(201).json({
+            status: true,
+            message: "Handled this gggg",
+          });
         }
         default: {
           await SuspiciousActivity.update(
@@ -428,15 +491,27 @@ export const updateSuspiciousStatus = async (
             }
           );
           await Complaint.update(
-            { actionTaken: "Warned this user", status: "reviewed",handledBy:admin.id, },
-            { where: { reportedUserId: suspicious.userId,status:'pending' } }
+            {
+              actionTaken: "Warned this user",
+              status: "reviewed",
+              handledBy: admin.id,
+            },
+            { where: { reportedUserId: suspicious.userId, status: "pending" } }
           );
+
+          await Warning.create({
+            userId: suspicious.userId,
+            adminId: admin?.id,
+            message: `Multpile user repoting on please be carefull for `,
+            type: "warning",
+            readStatus: false,
+          });
         }
       }
       return res.status(201).json({
-        status:true,
-        message:'Handled this activity'
-      })
+        status: true,
+        message: "Handled this activity",
+      });
     }
 
     return res.status(404).json({
@@ -451,3 +526,4 @@ export const updateSuspiciousStatus = async (
     });
   }
 };
+

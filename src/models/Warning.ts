@@ -5,7 +5,7 @@ import sequelize from "../config/db";
 interface WarningAttributes {
   id: number;
   userId: string;          // user who receives the warning
-  complaintId: number;     // optional link to complaint
+  complaintId?: number;     // optional link to complaint
   adminId: string;         // admin issuing the warning
   message: string;         // warning message
   type: "warning" | "info"; // warning type

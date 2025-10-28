@@ -1,13 +1,16 @@
 import express from "express";
-import { blockUser, getAdminComplaintList, getAllSuspisousActivity, getComplaintsByUser, handleComplaint, takeActionSuspiciousActivity, unBlockUser, updateSuspiciousStatus } from "../controllers/adminController";
+import { blockUser, getAdminComplaintList, getAllSuspisousActivity, getComplaintsByUser, getUser, handleComplaint, takeActionSuspiciousActivity, unBlockUser, updateSuspiciousStatus } from "../controllers/adminController";
 import { protect } from "../middleware/authMiddleware";
 const router = express.Router();
 router.post("/block/:userId",blockUser);  
+router.post("/getUser/:userId",getUser);  
 router.post("/unblock/:userId",unBlockUser);  
 router.get("/getAllCompaints",getAdminComplaintList);  
+router.get("/getAllCompaints/:status",getAdminComplaintList);  
 router.post("/reviewComplaint/:complaintId",handleComplaint);  
 router.get("/getAllSuspisiousActivity",getAllSuspisousActivity);  
-router.get("/getComplaintbyRepordeduser/:reportedUserId",getComplaintsByUser);  
+router.get("/getComplaintbyRepordeduser/:reportedUserId/",getComplaintsByUser);  
+router.get("/getComplaintbyRepordeduser/:reportedUserId/:last24hours",getComplaintsByUser);  
 router.get("/takeActionSuspisiousActivity/:Suspiciousid",takeActionSuspiciousActivity);  
 router.post("/updateSuspisiousActivity/:Suspiciousid",updateSuspiciousStatus);  
 export default router;      

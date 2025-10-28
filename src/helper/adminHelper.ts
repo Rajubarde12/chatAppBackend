@@ -1,7 +1,20 @@
+import { Op } from "sequelize";
 import { BlockedUser, Complaint, User } from "../models";
 
-export const getAllCompaintsbyuserId = async (reportedUserId: string) => {
+export const getAllCompaintsbyuserId = async (
+  reportedUserId: string,
+  onlyLast24Hours: boolean = false
+) => {
   try {
+    let whereCondition: any = {
+      reportedUserId,
+      status: "pending",
+    };
+
+    if (onlyLast24Hours) {
+      const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      whereCondition.createdAt = { [Op.gte]: last24Hours };
+    }
     const complaints = await Complaint.findAll({
       include: [
         { model: User, as: "reporter", attributes: ["id", "name", "email"] },
@@ -20,13 +33,10 @@ export const getAllCompaintsbyuserId = async (reportedUserId: string) => {
           ],
         },
       ],
-      where: {
-        reportedUserId: reportedUserId,
-        status: "pending",
-      },
+      where: whereCondition,
       order: [["createdAt", "DESC"]],
     });
-    return complaints
+    return complaints;
   } catch (err) {
     return [];
   }
