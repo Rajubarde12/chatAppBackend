@@ -8,15 +8,19 @@ import complaintRoute from './routes/complain.routes'
 import path from "path";
 import { adminProtec } from "./middleware/adminauthMiddleWare";
 import { protect } from "./middleware/authMiddleware";
+import cors from 'cors'
+import { loginAdmin } from "./controllers/adminController";
 
 
 dotenv.config();
 
 const app = express();
 app.use(express.json());
+app.use(cors());
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 // Routes
+app.use('/api/admin/login',loginAdmin)
 app.use('/api/admin',adminProtec,AdminRoute)
 app.use("/api/users", userRoutes);
 app.use("/api/users/chats", chatRoutes);

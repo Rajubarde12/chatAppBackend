@@ -1,16 +1,22 @@
 import { Op } from "sequelize";
-import {User} from "../models";
+import { User } from "../models";
 import Message from "../models/Message";
 
-export const getUserListWithLastMessage = async (currentUserId?: string) => {
-  // 1️⃣ Get all users except current
+export const getUserListWithLastMessage = async (
+  currentUserId?: string,
+  withMessage: boolean = false
+) => {
+  // 1️⃣ Get all users except current user
   const users = await User.findAll({
-    where: { id: { [Op.ne]: currentUserId } },
+    where: { id: { [Op.ne]: currentUserId, },role:'user' },
     attributes: { exclude: ["password"] },
     raw: true,
   });
 
-  // 2️⃣ Add last message + unread count
+  // 2️⃣ If withMessage is false → return plain users
+  if (!withMessage) return users;
+
+  // 3️⃣ Otherwise include lastMessage + unreadCount
   const result = await Promise.all(
     users.map(async (user) => {
       const lastMessage = await Message.findOne({
@@ -41,7 +47,7 @@ export const getUserListWithLastMessage = async (currentUserId?: string) => {
     })
   );
 
-  // 3️⃣ Sort users by latest message time (descending)
+  // 4️⃣ Sort users by latest message time (descending)
   result.sort((a, b) => {
     const timeA = a.lastMessageTime ? new Date(a.lastMessageTime).getTime() : 0;
     const timeB = b.lastMessageTime ? new Date(b.lastMessageTime).getTime() : 0;

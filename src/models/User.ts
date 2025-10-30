@@ -36,8 +36,6 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
   public readonly updatedAt!: Date;
   public bio?:string;
   public isDisabled?:boolean;
-
-  // 4. Method to compare passwords
   public async matchPassword(enteredPassword: string): Promise<boolean> {
     return await bcrypt.compare(enteredPassword, this.password);
   }

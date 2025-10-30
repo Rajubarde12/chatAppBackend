@@ -1,28 +1,54 @@
-"use client";
+
 
 import { useMutation } from "@tanstack/react-query";
 import api from "@/lib/axios";
 import { toast } from "sonner";
 
+interface LoginPayload {
+  email: string;
+  password: string;
+}
+
+interface LoginResponse {
+  message: string;
+  token: string;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    role?: string;
+  };
+}
+
 export const useLogin = () => {
-  return useMutation({
-    mutationFn: async (data: { email: string; password: string }) => {
-      const res = await api.post("/users/login", data, {
+  return useMutation<LoginResponse, any, LoginPayload>({
+    // ✅ API Call
+    mutationFn: async (data) => {
+        
+      const res = await api.post("/admin/login", data, {
         headers: { Authorization: "efdfshufghjgfuffgiufufifuffu" },
       });
       return res.data;
     },
+
+    // ✅ On Success: Save Token & Redirect
     onSuccess: (data) => {
-    console.log(data)
-      toast.success(data.message);
+      toast.success(data.message || "Login successful!");
+
       if (typeof window !== "undefined") {
         localStorage.setItem("token", data.token);
+        localStorage.setItem("user", JSON.stringify(data.user));
       }
-    },
-    onError: (error: any) => {
-      console.log("this isierrop", error);
 
-      toast.error(error.response?.data?.message || "❌ Login failed!");
+      // Optional: redirect after login
+      window.location.href = "/dashboard";
+    },
+
+    // ✅ On Error
+    onError: (error: any) => {
+      const msg =
+        error.response?.data?.message || "❌ Login failed. Please try again.";
+      toast.error(msg);
     },
   });
 };

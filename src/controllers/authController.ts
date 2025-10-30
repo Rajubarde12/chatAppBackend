@@ -66,7 +66,7 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
     const adminKey = req.headers.authorization;
 
     const user = await User.findOne({ where: { email } });
-    if (user?.role == "admin" && adminKey != process.env.ADMIN_SECURITY_KEY) {
+    if (adminKey&& user?.role != "admin" && adminKey != process.env.ADMIN_SECURITY_KEY) {
       res.status(401).json({
         message: "You are not autorized for login",
         status: false,
@@ -94,15 +94,15 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
         res.status(200).json({
           message: "Your Blocked permanenlty please contect admin support!",
           reason: blockRecord.reason,
-          status:false
+          status: false,
         });
         return;
       }
-      if(blockRecord?.actionTaken=='temporaryBan'){
-         res.status(200).json({
+      if (blockRecord?.actionTaken == "temporaryBan") {
+        res.status(200).json({
           message: "Your Blocked permanenlty please contect admin support!",
           reason: blockRecord.reason,
-          status:false
+          status: false,
         });
         return;
       }
@@ -216,15 +216,22 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
         .json({ message: "Invalid email or password", status: false });
       return;
     }
-
-    res.json({
+    if (user.avatar) {
+      const BASE_URL = `${req.protocol}://${req.get("host")}`;
+      user.avatar = `${BASE_URL}/${user.avatar}`;
+    }
+    const userData = {
       id: user.id,
       name: user.name,
       email: user.email,
       role: user.role,
-      token: generateToken(user.id.toString()),
+      avatar: user.avatar,
+    };
+    res.json({
       status: true,
       message: "User logged in successfully",
+      token: generateToken(user.id.toString()),
+      user: userData,
     });
   } catch (error: any) {
     res.status(500).json({ message: error.message });

@@ -7,52 +7,69 @@ import SuspiciousActivity from "./SuspiciousActivity";
 import Warning from "./Warning";
 import FailedLoginAttempt from "./FailedLoginAttempt";
 
+// -------------------------
+// 🧩 User ↔ BlockedUser
+// -------------------------
 BlockedUser.belongsTo(User, { foreignKey: "userId", as: "user" });
 BlockedUser.belongsTo(User, { foreignKey: "blockedBy", as: "blockedByAdmin" });
-BlockedUser.belongsTo(User, {
-  foreignKey: "unblockedBy",
-  as: "unblockedByAdmin",
-});
+BlockedUser.belongsTo(User, { foreignKey: "unblockedBy", as: "unblockedByAdmin" });
+User.hasMany(BlockedUser, { foreignKey: "userId", as: "blockRecords" });
 
-// Complaint ↔ User
+// -------------------------
+// 🧩 User ↔ Complaint
+// -------------------------
 Complaint.belongsTo(User, { foreignKey: "reporterId", as: "reporter" });
 Complaint.belongsTo(User, { foreignKey: "reportedUserId", as: "reportedUser" });
-Complaint.belongsTo(User, { foreignKey: "handledBy", as: "adminUser" });
+Complaint.belongsTo(User, { foreignKey: "handledBy", as: "handledByAdmin" });
 
-// BlockedUser ↔ Complaint (Many-to-Many)
+User.hasMany(Complaint, { foreignKey: "reporterId", as: "reportedComplaints" });
+User.hasMany(Complaint, { foreignKey: "reportedUserId", as: "complaintsAgainst" });
+
+// -------------------------
+// 🧩 BlockedUser ↔ Complaint (Many-to-Many)
+// -------------------------
 BlockedUser.belongsToMany(Complaint, {
   through: BlockedUserComplaint,
   as: "complaints",
-  foreignKey: "blockedUserId", // UUID now
+  foreignKey: "blockedUserId",
 });
 
 Complaint.belongsToMany(BlockedUser, {
   through: BlockedUserComplaint,
   as: "blockRecords",
-  foreignKey: "complaintId", // UUID now
+  foreignKey: "complaintId",
 });
 
+// -------------------------
+// 🧩 SuspiciousActivity ↔ User
+// -------------------------
 SuspiciousActivity.belongsTo(User, { foreignKey: "userId", as: "user" });
-SuspiciousActivity.belongsTo(User, {
-  foreignKey: "handledBy",
-  as: "handledByAdmin",
-});
+SuspiciousActivity.belongsTo(User, { foreignKey: "handledBy", as: "handledByAdmin" });
 User.hasMany(SuspiciousActivity, { foreignKey: "userId", as: "activities" });
 
+// -------------------------
+// 🧩 Warning ↔ User / Complaint
+// -------------------------
 Warning.belongsTo(User, { foreignKey: "userId", as: "user" });
 Warning.belongsTo(Complaint, { foreignKey: "complaintId", as: "complaint" });
 Warning.belongsTo(User, { foreignKey: "adminId", as: "adminUser" });
-User.hasMany(FailedLoginAttempt, {
-  foreignKey: "userId",
-  as: "failedAttempts",
-});
-FailedLoginAttempt.belongsTo(User, { foreignKey: "userId", as: "user" });
+User.hasMany(Warning, { foreignKey: "userId", as: "warnings" });
 
+// -------------------------
+// 🧩 Failed Login Attempts ↔ User
+// -------------------------
+FailedLoginAttempt.belongsTo(User, { foreignKey: "userId", as: "user" });
+User.hasMany(FailedLoginAttempt, { foreignKey: "userId", as: "failedAttempts" });
+
+// -------------------------
+// ✅ Export all models
+// -------------------------
 export {
   User,
   BlockedUser,
   Complaint,
   BlockedUserComplaint,
   SuspiciousActivity,
+  Warning,
   FailedLoginAttempt,
 };
