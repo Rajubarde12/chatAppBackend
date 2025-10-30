@@ -1,6 +1,6 @@
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
-import {User} from "../models";
+import { User } from "../models";
 import {
   makeMarkeAsReadMessage,
   sendMessage,
@@ -22,7 +22,9 @@ export const initSocket = (server: any) => {
         id: string;
       };
       // const user = await User.findById(decoded.id).select("-password");
-      const user = await User.findByPk(decoded.id,{attributes: { exclude: ["password",] }});
+      const user = await User.findByPk(decoded.id, {
+        attributes: { exclude: ["password"] },
+      });
       if (!user) return next(new Error("Authentication error: Invalid user"));
 
       (socket as any).user = user;
@@ -49,24 +51,37 @@ export const initSocket = (server: any) => {
         },
       }
     );
-    socket.join(user.id.toString());
+    socket.join(user.id);
+    socket.on("chatOpened", ({ receiverId }) => {
+      activeChats[user.id] = receiverId;
+    });
+    socket.on("chatClosed", () => {
+      activeChats[user.id] = null;
+      console.log(`❌ ${user.id} closed chat`);
+    });
 
     socket.on("sendMessage", async (data) => {
       try {
-        const { chatId, receiverId, message, messageType } = data;
+        console.log(activeChats);
+        const { chatId, receiverId, message, messageType, attachments } = data;
         const newMessage = await sendMessage({
           senderId: user.id,
           receiverId: receiverId,
           message,
           messageType: messageType || "text",
+          attachments,
           isOnline: onlineUsers[receiverId] ? true : false,
         });
 
-        io.to(receiverId.toString()).emit("newMessage", newMessage);
+        socket.to(receiverId).emit("newMessage", newMessage);
 
         // 4️⃣ Emit ack to sender
+        if (activeChats[receiverId] !== user.id) {
+          socket
+            .to(receiverId)
+            .emit("pushNotification", { newMessage, User: user });
+        }
         socket.emit("messageSent", newMessage);
-        socket.to(receiverId.toString()).emit("pushNotification", { newMessage, User: user });
       } catch (err) {
         console.error("Error sending message:", err);
       }
@@ -74,10 +89,9 @@ export const initSocket = (server: any) => {
     socket.on("readMessage", async (data) => {
       const userId = user.id;
       const { receiverId } = data;
-      console.log(userId,receiverId);
-      
-      const messageIds = await makeMarkeAsReadMessage(receiverId, userId); 
-      io.to(receiverId.toString()).emit("readMessagesid", messageIds);
+
+      const messageIds = await makeMarkeAsReadMessage(receiverId, userId);
+      io.to(receiverId).emit("readMessagesid", messageIds);
     });
 
     // Disconnect
@@ -98,3 +112,4 @@ export const initSocket = (server: any) => {
 };
 
 const onlineUsers: Record<string, string> = {};
+const activeChats: Record<string, string | null> = {};

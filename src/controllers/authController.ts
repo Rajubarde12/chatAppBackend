@@ -66,7 +66,11 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
     const adminKey = req.headers.authorization;
 
     const user = await User.findOne({ where: { email } });
-    if (adminKey&& user?.role != "admin" && adminKey != process.env.ADMIN_SECURITY_KEY) {
+    if (
+      adminKey &&
+      user?.role != "admin" &&
+      adminKey != process.env.ADMIN_SECURITY_KEY
+    ) {
       res.status(401).json({
         message: "You are not autorized for login",
         status: false,
@@ -226,6 +230,8 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
       email: user.email,
       role: user.role,
       avatar: user.avatar,
+      status: user.isActive,
+      lastLogin: user.lastLogin,
     };
     res.json({
       status: true,
@@ -264,7 +270,7 @@ export const getUsers = async (
 ): Promise<void> => {
   try {
     const currentUserId = req.user?.id;
-    const users = await getUserListWithLastMessage(currentUserId);
+    const users = await getUserListWithLastMessage(currentUserId,true);
 
     // const users = await User.findAll({
     //   where: {

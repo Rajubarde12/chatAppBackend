@@ -11,10 +11,11 @@ interface SendMessageData {
   message: string;
   messageType?: "text" | "image" | "video" | "file";
   isOnline:true|false
+  attachments:any[]
 }
 
 export const sendMessage = async (data: SendMessageData) => {
-  const { senderId, receiverId, message, messageType = "text",isOnline } = data;
+  const { senderId, receiverId, message, messageType = "text",attachments,isOnline } = data;
 
   // 1️⃣ Find or create chat
   let chat = await Chat.findOne({
@@ -38,6 +39,7 @@ export const sendMessage = async (data: SendMessageData) => {
     message,
     messageType,
     isRead: false,
+    attachments,
     isDelivered:isOnline  
   });
 
