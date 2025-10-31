@@ -42,15 +42,29 @@ export const initSocket = (server: any) => {
       { isActive: true, lastLogin: undefined },
       { where: { id: user.id } }
     );
-    io.emit("userStatusChanged", { userId: user.id, isActive: true });
+    const undeliveredMessages = await Message.findAll({
+      where: {
+        receiverId: user.id,
+        isDelivered: false,
+      },
+      attributes: ["id"], // sirf id chahiye
+    });
+    const undeliveredIds = undeliveredMessages.map((m) => m.id);
     await Message.update(
       { isDelivered: true },
       {
         where: {
-          receiverId: user.id,
+          id: undeliveredIds,
         },
       }
     );
+    io.emit("userStatusChanged", {
+      userId: user.id,
+      isActive: true,
+      undeliveredIds,
+    });
+    triggerRefresh(io, user.id);
+
     socket.join(user.id);
     socket.on("chatOpened", ({ receiverId }) => {
       activeChats[user.id] = receiverId;
@@ -73,6 +87,7 @@ export const initSocket = (server: any) => {
         });
 
         socket.to(receiverId).emit("newMessage", newMessage);
+        triggerRefresh(io, user.id, receiverId);
 
         // 4️⃣ Emit ack to sender
         if (activeChats[receiverId] !== user.id) {
@@ -88,9 +103,9 @@ export const initSocket = (server: any) => {
     socket.on("readMessage", async (data) => {
       const userId = user.id;
       const { receiverId } = data;
-
       const messageIds = await makeMarkeAsReadMessage(receiverId, userId);
       io.to(receiverId).emit("readMessagesid", messageIds);
+      triggerRefresh(io, user.id, receiverId);
     });
 
     // Disconnect
@@ -108,6 +123,10 @@ export const initSocket = (server: any) => {
       });
     });
   });
+};
+const triggerRefresh = (io: Server, senderId: string, receiverId?: string) => {
+  io.to(senderId).emit("refreshUserList", true);
+  if (receiverId) io.to(receiverId).emit("refreshUserList", true);
 };
 
 const onlineUsers: Record<string, string> = {};

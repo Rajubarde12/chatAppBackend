@@ -148,7 +148,7 @@ export function SuspisiousActivitysection({
                           }`}
                           onClick={() => {
                             setReasonCategory(c.handledBy);
-                            setSelectedComplaint(c);
+                            // setSelectedComplaint(c);
                           }}
                         >
                           {c.status === "pending" ? "Take Action" : "Done"}

@@ -1,5 +1,5 @@
 import { Response } from "express";
-import { AuthRequest } from "../middleware/adminauthMiddleWare";
+import { AuthRequest } from "../middleware/authMiddleware";
 import Chat from "../models/Chat";
 import Message from "../models/Message";
 import {User} from "../models";
