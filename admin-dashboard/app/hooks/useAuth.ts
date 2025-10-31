@@ -39,13 +39,12 @@ export const useLogin = () => {
         localStorage.setItem("token", data.token);
         localStorage.setItem("user", JSON.stringify(data.user));
       }
-
-      // Optional: redirect after login
       window.location.href = "/dashboard";
     },
 
     // ✅ On Error
     onError: (error: any) => {
+    
       const msg =
         error.response?.data?.message || "❌ Login failed. Please try again.";
       toast.error(msg);

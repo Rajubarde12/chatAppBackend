@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
-import {User} from "../models";
+import { BlockedUser, User } from "../models";
 
 interface JwtPayload {
   id: string;
@@ -11,7 +11,11 @@ export interface AuthRequest extends Request {
   user?: User;
 }
 
-export const protect = async (req: AuthRequest, res: Response, next: NextFunction) => {
+export const protect = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
   let token;
 
   if (
@@ -21,27 +25,36 @@ export const protect = async (req: AuthRequest, res: Response, next: NextFunctio
     try {
       // Extract token from header
       token = req.headers.authorization.split(" ")[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as JwtPayload;
-      const {isPasswordUpdate} = req.body||{};
+      const decoded = jwt.verify(
+        token,
+        process.env.JWT_SECRET as string
+      ) as JwtPayload;
+      const { isPasswordUpdate } = req.body || {};
 
-      const user = await User.findByPk(decoded.id,!isPasswordUpdate? {attributes: { exclude: ['password'] }}:undefined);
+      const user = await User.findByPk(
+        decoded.id,
+        !isPasswordUpdate
+          ? { attributes: { exclude: ["password"] } }
+          : undefined
+      );
       if (!user) {
         res.status(401).json({ message: "Not authorized" });
         return;
       }
-      if(user.isDisabled){
-       return res.status(403).json({
-        message: "Your account is blocked. Contact support for help.",
-        status: false,
-      });
-     
+      if (user.isDisabled) {
+     const blockdata=   await BlockedUser.findOne({ where: { userId: user.id } });
+
+        return res.status(403).json({
+          message:blockdata?.reason?? "Your account is blocked. Contact support for help.",
+          status: false,
+        });
       }
 
       req.user = user; // attach user to request
       next();
     } catch (error) {
-      console.log("this is errror",error);
-      
+      console.log("this is errror", error);
+
       res.status(401).json({ message: "Not authorized, token failed" });
     }
   }

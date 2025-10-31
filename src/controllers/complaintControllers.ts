@@ -27,8 +27,7 @@ export const addComplaint = async (req: AuthRequest, res: Response) => {
     });
 
     if (
-      blockRecord?.actionTaken == "permanentBan" ||
-      blockRecord?.actionTaken == "temporaryBan"
+      blockRecord?.isBlocked 
     ) {
       return res.status(400).json({
         message:

@@ -12,6 +12,11 @@ import { useParams } from "next/navigation";
 import { useGet } from "@/app/hooks/useGet";
 import { Button } from "@/components/ui/button";
 import { ComplaintsSection } from "@/components/ComplaintSection/page";
+import UserCard from "@/components/userCard/page";
+import { usePut } from "@/app/hooks/usePut";
+import { queryClient } from "@/lib/queryClient";
+import { SuspisiousActivitysection } from "@/components/SuspisiousActivitysection/page";
+
 type TableProps = {
   headers: string[];
   rows: any[];
@@ -20,8 +25,8 @@ type TableProps = {
 };
 export default function UserDetailsPage() {
   const { id } = useParams() as {
-    id:string
-  }; 
+    id: string;
+  };
 
   // const id = "d2b346ca-4687-485e-8066-193b048968e0"; // static for testing
   // const [user, setUser] = useState<UserDetails | null>(null);
@@ -30,25 +35,18 @@ export default function UserDetailsPage() {
     ["user", id],
     `/admin/getUser/${id}`
   );
-
-  // useEffect(() => {
-  //   //  alert(id1)
-  //   const fetchUserDetails = async () => {
-  //     try {
-  //       const token = localStorage.getItem("token");
-  //       const res = await api.get(`/admin/getUser/${id}`, {
-  //         headers: { Authorization: `Bearer ${token}` },
-  //       });
-  //       setUser(res.data.data);
-  //     } catch (err: any) {
-  //       console.error(err);
-  //       toast.error("Failed to load user details");
-  //     } finally {
-  //       setLoading(false);
-  //     }
-  //   };
-  //   fetchUserDetails();
-  // }, [id]);
+  const { mutate: unblockUser, isPending } = usePut({
+    onSuccess: (data) => {
+      toast.success(data.message);
+      queryClient.invalidateQueries({
+        queryKey: ["user", id],
+      });
+    },
+    onError: (err: any) => {
+      console.log(err);
+      toast.error(err?.response?.data?.message ?? err?.message);
+    },
+  });
 
   if (loading)
     return (
@@ -64,46 +62,18 @@ export default function UserDetailsPage() {
   const activities = user.activities || [];
   const blockRecords = user.blockRecords || [];
   const warnings = user.warnings || [];
-  {
-    console.log(user);
-  }
+
+  const handleUnblock = async (userId: string, reason: string) => {
+    unblockUser({
+      url: `/admin/unblock/${userId}`,
+      data: { unblockedReason: reason },
+    });
+  };
 
   return (
     <div className="p-6 md:p-10 bg-gray-50 min-h-screen space-y-10">
       {/* 🧍 Profile Header */}
-      <Card className="p-6 md:p-8 bg-gradient-to-r from-blue-50 via-white to-blue-50 border shadow-md backdrop-blur-md">
-        <div className="flex flex-col md:flex-row items-center gap-6">
-          <Image
-            src={
-              user.avatar ||
-              "https://cdn-icons-png.flaticon.com/512/9131/9131529.png"
-            }
-            unoptimized
-            alt={user.name}
-            width={100}
-            height={100}
-            className="rounded-full border-4 border-blue-100 shadow-lg"
-          />
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
-              {user.name}
-            </h1>
-            <p className="text-gray-500">{user.email}</p>
-            <div className="flex gap-3 mt-3 flex-wrap">
-              {user.isDisabled ? (
-                <Badge variant="destructive">Disabled</Badge>
-              ) : user.isActive ? (
-                <Badge variant="default">Active</Badge>
-              ) : (
-                <Badge variant="secondary">Inactive</Badge>
-              )}
-              <Badge variant="outline" className="capitalize">
-                {user.role}
-              </Badge>
-            </div>
-          </div>
-        </div>
-      </Card>
+      <UserCard user={user} onUnblock={handleUnblock} />
 
       {/* 📊 Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
@@ -122,30 +92,9 @@ export default function UserDetailsPage() {
       </div>
 
       {/* 📝 Sections */}
+      <SuspisiousActivitysection activities={activities}/>
       <ComplaintsSection complaints={complaints} />
 
-      <Section title="Suspicious Activities" count={activities.length}>
-        {activities.length ? (
-          <Table
-            headers={["Type", "Details", "Status", "Date"]}
-            rows={activities.map((s) => [
-              s.type,
-              (() => {
-                try {
-                  const d = JSON.parse(s.details);
-                  return `Reports: ${d.reportCount}, Period: ${d.period}`;
-                } catch {
-                  return s.details;
-                }
-              })(),
-              s.status,
-              new Date(s.createdAt).toLocaleDateString(),
-            ])}
-          />
-        ) : (
-          <Empty text="No suspicious activities found." />
-        )}
-      </Section>
 
       <Section title="Block History" count={blockRecords.length}>
         {blockRecords.length ? (
@@ -190,6 +139,10 @@ export default function UserDetailsPage() {
                 <p>
                   <strong>Date:</strong>{" "}
                   {new Date(w.createdAt).toLocaleDateString()}
+                </p>
+                <p>
+                  <strong>Read Status :</strong>{" "}
+                  {w.readStatus ? "Read" : "Pending"}
                 </p>
               </Card>
             ))}

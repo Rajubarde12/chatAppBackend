@@ -1,4 +1,5 @@
 import axios from "axios";
+import { toast } from "sonner";
 
 // ✅ Create instance
 const api = axios.create({
@@ -27,6 +28,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    console.log(error);
     if (error.response?.status === 401) {
       // Token invalid or expired — logout the user
       if (typeof window !== "undefined") {
@@ -34,6 +36,8 @@ api.interceptors.response.use(
         localStorage.removeItem("user");
         window.location.href = "/login";
       }
+    } else if (error.response?.status === 500) {
+      toast.error(error.response.data.message);
     }
     return Promise.reject(error);
   }

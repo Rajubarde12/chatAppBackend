@@ -47,7 +47,7 @@ export const adminProtec = async (
           status: false,
         });
       }
-      if (user.role != "admin") {
+      if (user.role != "admin"&&user?.role!="SuperAdmin") {
         return res.status(401).json({
           message: "You are not authorized to access admin pannel!",
           status: false,

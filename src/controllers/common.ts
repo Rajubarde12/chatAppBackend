@@ -4,11 +4,20 @@ import Message from "../models/Message";
 
 export const getUserListWithLastMessage = async (
   currentUserId?: string,
-  withMessage: boolean = false
+  withMessage: boolean = false,
+  role?: string
 ) => {
   // 1️⃣ Get all users except current user
+
+  let wherClose = { id: { [Op.ne]: currentUserId }, role: "user" } as any;
+  if (role == "SuperAdmin") {
+    wherClose = {
+      id: { [Op.ne]: currentUserId },
+    };
+  }
+
   const users = await User.findAll({
-    where: { id: { [Op.ne]: currentUserId, },role:'user' },
+    where: wherClose,
     attributes: { exclude: ["password"] },
     raw: true,
   });

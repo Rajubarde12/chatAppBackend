@@ -33,17 +33,12 @@ export const registerUser = async (
         .json({ message: "All Fields are required", status: false });
       return;
     }
-    if (role == "admin" && adminKey != process.env.ADMIN_SECURITY_KEY) {
-      res
-        .status(401)
-        .json({ message: "You can not egibile for this role", status: false });
-      return;
-    }
+  
     const user = await User.create({
       name,
       email,
       password: password,
-      role: role ?? "user",
+      role: "user",
     });
 
     res.status(201).json({
@@ -66,17 +61,7 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
     const adminKey = req.headers.authorization;
 
     const user = await User.findOne({ where: { email } });
-    if (
-      adminKey &&
-      user?.role != "admin" &&
-      adminKey != process.env.ADMIN_SECURITY_KEY
-    ) {
-      res.status(401).json({
-        message: "You are not autorized for login",
-        status: false,
-      });
-      return;
-    }
+   
 
     if (!user) {
       res
@@ -94,7 +79,7 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
         where: { userId: user?.id },
         order: [["createdAt", "DESC"]], // 👈 latest record first
       });
-      if (blockRecord?.actionTaken == "permanentBan") {
+      if (blockRecord?.actionTaken == "permanentBan"&&blockRecord.isBlocked) {
         res.status(200).json({
           message: "Your Blocked permanenlty please contect admin support!",
           reason: blockRecord.reason,
@@ -102,9 +87,9 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
         });
         return;
       }
-      if (blockRecord?.actionTaken == "temporaryBan") {
+      if (blockRecord?.actionTaken == "temporaryBan"&&blockRecord.isBlocked) {
         res.status(200).json({
-          message: "Your Blocked permanenlty please contect admin support!",
+          message: "Your Blocked  please contect admin support!",
           reason: blockRecord.reason,
           status: false,
         });

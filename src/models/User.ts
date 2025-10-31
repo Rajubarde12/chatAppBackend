@@ -9,7 +9,7 @@ interface UserAttributes {
   name: string;
   email: string;
   password: string;
-  role: "user" | "admin";
+  role: "user" | "admin"|"SuperAdmin";
   avatar?: string;
   isActive: boolean;
   lastLogin?: Date;
@@ -28,7 +28,7 @@ class User extends Model<UserAttributes, UserCreationAttributes> implements User
   public name!: string;
   public email!: string;
   public password!: string;
-  public role!: "user" | "admin";
+  public role!: "user" | "admin"|"SuperAdmin";
   public avatar?: string;
   public isActive!: boolean;
   public lastLogin?: Date;
@@ -52,7 +52,7 @@ User.init(
     name: { type: DataTypes.STRING(50), allowNull: false },
     email: { type: DataTypes.STRING(100), allowNull: false, unique: true },
     password: { type: DataTypes.STRING(255), allowNull: false },
-    role: { type: DataTypes.ENUM("user", "admin"), defaultValue: "user" },
+    role: { type: DataTypes.ENUM("user", "admin","SuperAdmin"), defaultValue: "user" },
     avatar: { type: DataTypes.STRING(255), defaultValue: "" },
     isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
     lastLogin: { type: DataTypes.DATE, allowNull: true },

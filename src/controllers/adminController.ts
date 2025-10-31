@@ -16,13 +16,16 @@ import { getUserListWithLastMessage } from "./common";
 import { Op } from "sequelize";
 import generateToken from "../utils/generateToken";
 
-export const loginAdmin = async (req: Request, res: Response): Promise<void> => {
+export const loginAdmin = async (
+  req: Request,
+  res: Response
+): Promise<void> => {
   try {
     const { email, password } = req.body;
     const adminKey = req.headers.authorization;
 
     const user = await User.findOne({ where: { email } });
-    if (user?.role != "admin") {
+    if (user?.role != "admin" && user?.role != "SuperAdmin") {
       res.status(401).json({
         message: "You are not autorized for login",
         status: false,
@@ -114,6 +117,13 @@ export const getUser = async (req: AuthRequest, res: Response) => {
         {
           model: Warning,
           as: "warnings",
+          include: [
+            {
+              model: User,
+              as: "adminUser",
+              attributes: ["id", "name", "email"],
+            },
+          ],
         },
         {
           model: FailedLoginAttempt,
@@ -233,6 +243,14 @@ export const unBlockUser = async (req: AuthRequest, res: Response) => {
   if (!admin?.id) {
     return res.status(401).json({ success: false, message: "Not authorized" });
   }
+  const { unblockedReason } = req.body || {};
+  if (!unblockedReason) {
+    res.status(400).json({
+      status: false,
+      message: "unblockedReason is required",
+    });
+    return;
+  }
 
   const { userId } = req.params;
   if (!userId) {
@@ -250,7 +268,7 @@ export const unBlockUser = async (req: AuthRequest, res: Response) => {
     if (!blockRecord) {
       return res
         .status(404)
-        .json({ success: false, message: "Block record not found" });
+        .json({ status: false, message: "Block record not found" });
     }
 
     const userToUnblock = await User.findByPk(userId);
@@ -262,6 +280,7 @@ export const unBlockUser = async (req: AuthRequest, res: Response) => {
     blockRecord.unblockedAt = new Date();
     blockRecord.unblockedBy = admin.id;
     blockRecord.isBlocked = false;
+    blockRecord.unblockedReason = unblockedReason;
     await blockRecord.save();
 
     return res
@@ -293,7 +312,7 @@ export const getAdminComplaintList = async (
           as: "reportedUser",
           attributes: ["id", "name", "email"],
         },
-        { model: User, as: "adminUser", attributes: ["id", "name"] },
+        { model: User, as: "handledByAdmin", attributes: ["id", "name"] },
         {
           model: BlockedUser,
           as: "blockRecords",
@@ -377,6 +396,7 @@ export const handleComplaint = async (req: AuthRequest, res: Response) => {
             `You received a warning for complaint: "${mainComplaint.reason}"`,
           type: "warning",
           readStatus: false,
+          complaintId: mainComplaint.id,
         },
         { transaction: t }
       );
@@ -838,7 +858,15 @@ export const updateSuspiciousStatus = async (
 
 export const getllCounts = async (req: AuthRequest, res: Response) => {
   try {
-    const users = await User.count();
+    const { user } = req;
+    let wherClose = { role: "user" } as any;
+    if (user?.role == "SuperAdmin") {
+      wherClose.role = {
+        [Op.ne]: "SuperAdmin",
+      };
+    }
+
+    const users = await User.count({ where: wherClose });
     const complaints = await Complaint.count();
     const warnings = await Warning.count();
     const blocked = await BlockedUser.count();
@@ -866,7 +894,8 @@ export const getUsers = async (
 ): Promise<void> => {
   try {
     const currentUserId = req.user?.id;
-    const users = await getUserListWithLastMessage(currentUserId);
+    const role = req.user?.role;
+    const users = await getUserListWithLastMessage(currentUserId, false, role);
     res.status(200).json({ data: { users }, status: true, message: "success" });
   } catch (error: any) {
     console.error(error);

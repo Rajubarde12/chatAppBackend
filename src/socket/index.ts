@@ -62,7 +62,6 @@ export const initSocket = (server: any) => {
 
     socket.on("sendMessage", async (data) => {
       try {
-        console.log(activeChats);
         const { chatId, receiverId, message, messageType, attachments } = data;
         const newMessage = await sendMessage({
           senderId: user.id,
