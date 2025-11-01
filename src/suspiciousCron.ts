@@ -2,10 +2,10 @@
 import cron from "node-cron";
 import { Op } from "sequelize";
 import sequelize from "./config/db";
-import User from "./models/User";
-import SuspiciousActivity from "./models/SuspiciousActivity";
+import {User} from "./models";
+import {SuspiciousActivity} from "./models";
 import {Message} from "./models";
-import Complaint from "./models/Complaint";
+import {Complaint} from "./models";
 
 cron.schedule("*/1 * * * *", async () => {
   console.log("Running suspicious activity checks...");

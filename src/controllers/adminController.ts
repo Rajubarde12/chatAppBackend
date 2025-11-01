@@ -7,7 +7,7 @@ import {
 } from "../models";
 import { User } from "../models";
 import { Complaint } from "../models";
-import Warning from "../models/Warning";
+import {Warning} from "../models";
 import { SuspiciousActivity } from "../models";
 import { getAllCompaintsbyuserId } from "../helper/adminHelper";
 import sequelize from "../config/db";

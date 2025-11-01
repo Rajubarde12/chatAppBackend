@@ -1,9 +1,9 @@
 import { Request, Response } from "express";
-import User from "../models/User";
+import { User } from "../models";
 import bcrypt from "bcryptjs";
 import generateToken from "../utils/generateToken";
 import { AuthRequest } from "../middleware/authMiddleware";
-import { log } from "console";
+import countries from "i18n-iso-countries";
 import { Op } from "sequelize";
 import { getUserListWithLastMessage } from "./common";
 import {
@@ -12,40 +12,120 @@ import {
   FailedLoginAttempt,
   SuspiciousActivity,
 } from "../models";
+import { CountryCodeRequest } from "../middleware/countryCodeMiddleware";
+import geoip from "geoip-lite";
+import { CountryCode, getExampleNumber } from "libphonenumber-js";
+const countryCodesList = require("country-codes-list");
+countries.registerLocale(require("i18n-iso-countries/langs/en.json"));
+import examples from "libphonenumber-js/examples.mobile.json";
+const callingCodes = countryCodesList.customList(
+  "countryCode",
+  "{countryCallingCode}"
+);
 
-// Register
+export const detectCountryAndPhoneMeta = (req: Request, res: Response) => {
+  try {
+    let ip =
+      (req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ||
+      req.socket.remoteAddress ||
+      "";
+    if (ip === "::1" || ip.startsWith("127.") || ip.includes("192.168")) {
+      const testCountryISO = "US"; // Change here for testing
+
+      const testIPs: Record<string, string> = {
+        IN: "49.207.180.1", // India
+        US: "8.8.8.8", // USA
+        GB: "81.2.69.142", // UK
+        AU: "1.1.1.1", // Australia
+        FR: "51.15.0.1", // France
+        DE: "139.162.130.187", // Germany
+        JP: "210.140.92.187", // Japan
+        CN: "61.135.169.121", // China
+        AE: "94.200.1.160", // UAE
+      };
+
+      ip = testIPs[testCountryISO] || testIPs["IN"];
+    }
+
+    const geo = geoip.lookup(ip);
+    const countryISO = geo?.country || "IN";
+    const callingCode = callingCodes[countryISO];
+    const countryCode = callingCode ? `+${callingCode}` : "+91";
+    const countryName = countries.getName(countryISO, "en") || "India";
+
+    return res.status(200).json({
+      message: "Country meta  get succcess",
+      status: true,
+      data: {
+        countryCode,
+        countryName,
+        expectedExample: getExampleNumber(countryISO as CountryCode, examples),
+      },
+    });
+  } catch (error) {
+    res.send({
+      status: false,
+      message: "errroo",
+    });
+  }
+};
+
 export const registerUser = async (
-  req: Request,
+  req: CountryCodeRequest,
   res: Response
 ): Promise<void> => {
   try {
-    const { name, email, password, role } = req.body;
-    const adminKey = req.headers.authorization;
+    const { name, email, password, role, mobileNumber } = req.body;
+    const conditions: any[] = [];
+    const { countryCode, countryISO, countryName } = req;
 
-    const userExists = await User.findOne({ where: { email } });
+    if (email) {
+      conditions.push({ email });
+    }
+
+    if (mobileNumber) {
+      conditions.push({ mobileNumber });
+    }
+
+    const userExists = await User.findOne({
+      where: {
+        [Op.or]: conditions,
+      },
+    });
     if (userExists) {
       res.status(400).json({ message: "User already exists", status: false });
       return;
     }
-    if (!name || !email || !password) {
+    if (!name || !password || !mobileNumber) {
       res
         .status(442)
         .json({ message: "All Fields are required", status: false });
       return;
     }
-  
+
     const user = await User.create({
       name,
       email,
       password: password,
       role: "user",
+      mobileNumber,
+      countryCode,
+      countryName,
+      countryISO,
     });
 
     res.status(201).json({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        mobileNumber: `${user.countryCode}${user.mobileNumber}`,
+        isDisabled: user.isDisabled,
+        avatar: user.avatar,
+        countryISO: user.countryISO,
+        countryName: user.countryName,
+      },
       token: generateToken(user.id.toString()),
       status: true,
       message: "User registered successfully",
@@ -61,7 +141,6 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
     const adminKey = req.headers.authorization;
 
     const user = await User.findOne({ where: { email } });
-   
 
     if (!user) {
       res
@@ -79,7 +158,7 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
         where: { userId: user?.id },
         order: [["createdAt", "DESC"]], // 👈 latest record first
       });
-      if (blockRecord?.actionTaken == "permanentBan"&&blockRecord.isBlocked) {
+      if (blockRecord?.actionTaken == "permanentBan" && blockRecord.isBlocked) {
         res.status(200).json({
           message: "Your Blocked permanenlty please contect admin support!",
           reason: blockRecord.reason,
@@ -87,7 +166,7 @@ export const loginUser = async (req: Request, res: Response): Promise<void> => {
         });
         return;
       }
-      if (blockRecord?.actionTaken == "temporaryBan"&&blockRecord.isBlocked) {
+      if (blockRecord?.actionTaken == "temporaryBan" && blockRecord.isBlocked) {
         res.status(200).json({
           message: "Your Blocked  please contect admin support!",
           reason: blockRecord.reason,
@@ -255,7 +334,7 @@ export const getUsers = async (
 ): Promise<void> => {
   try {
     const currentUserId = req.user?.id;
-    const users = await getUserListWithLastMessage(currentUserId,true);
+    const users = await getUserListWithLastMessage(currentUserId, true);
 
     // const users = await User.findAll({
     //   where: {

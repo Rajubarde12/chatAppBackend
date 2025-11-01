@@ -1,8 +1,8 @@
 // models/Message.ts
 import { DataTypes, Model, Optional } from "sequelize";
 import sequelize from "../config/db";
-import User from "./User"; // assuming User model exists
-import Chat from "./Chat";
+import {User} from './index'
+import {Chat} from "./index";
 
 // 1. Define attributes
 interface MessageAttributes {
