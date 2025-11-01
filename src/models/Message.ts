@@ -2,6 +2,7 @@
 import { DataTypes, Model, Optional } from "sequelize";
 import sequelize from "../config/db";
 import User from "./User"; // assuming User model exists
+import Chat from "./Chat";
 
 // 1. Define attributes
 interface MessageAttributes {
@@ -13,6 +14,7 @@ interface MessageAttributes {
   attachments?: string[];
   isRead: boolean;
   isDelivered: boolean;
+  chatId: number;
   forwardedFromMessageId?: number | null;
   createdAt?: Date;
   updatedAt?: Date;
@@ -27,6 +29,7 @@ interface MessageCreationAttributes
     | "isRead"
     | "isDelivered"
     | "forwardedFromMessageId"
+    | "chatId"
     | "createdAt"
     | "updatedAt"
   > {}
@@ -44,6 +47,7 @@ class Message
   public attachments?: string[];
   public isRead!: boolean;
   public isDelivered!: boolean;
+  public chatId!: number;
   forwardedFromMessageId?: number | null | undefined;
   public readonly createdAt!: Date;
   public readonly updatedAt!: Date;
@@ -64,7 +68,7 @@ Message.init(
       onDelete: "CASCADE",
     },
     receiverId: {
-      type:DataTypes.UUID,
+      type: DataTypes.UUID,
       allowNull: false,
       references: { model: User, key: "id" }, // foreign key to User
       onDelete: "CASCADE",
@@ -86,6 +90,13 @@ Message.init(
       type: DataTypes.BOOLEAN,
       defaultValue: false,
     },
+    chatId: {
+      type: DataTypes.INTEGER.UNSIGNED,
+      allowNull: false,
+      references: { model: Chat, key: "id" },
+      onDelete: "CASCADE",
+    },
+
     forwardedFromMessageId: {
       type: DataTypes.INTEGER.UNSIGNED,
       allowNull: true,
@@ -100,12 +111,6 @@ Message.init(
   }
 );
 
-// 5. Associations (optional, if you want to use include)
-Message.belongsTo(User, { as: "sender", foreignKey: "senderId" });
-Message.belongsTo(User, { as: "receiver", foreignKey: "receiverId" });
-Message.hasMany(Message, {
-  as: "forwards",
-  foreignKey: "forwardedFromMessageId",
-});
+
 
 export default Message;

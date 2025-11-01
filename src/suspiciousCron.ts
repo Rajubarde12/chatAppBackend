@@ -4,7 +4,7 @@ import { Op } from "sequelize";
 import sequelize from "./config/db";
 import User from "./models/User";
 import SuspiciousActivity from "./models/SuspiciousActivity";
-import Message from "./models/Message";
+import {Message} from "./models";
 import Complaint from "./models/Complaint";
 
 cron.schedule("*/1 * * * *", async () => {

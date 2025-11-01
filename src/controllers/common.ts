@@ -1,6 +1,6 @@
 import { Op } from "sequelize";
 import { User } from "../models";
-import Message from "../models/Message";
+import {Message} from "../models";
 
 export const getUserListWithLastMessage = async (
   currentUserId?: string,

@@ -1,7 +1,5 @@
 import { BelongsToManyAddAssociationsMixin, DataTypes, Model, Optional } from "sequelize";
 import sequelize from "../config/db";
-import User from "./User";
-import Message from "./Message";
 
 interface ChatAttributes {
   id: number;
@@ -18,9 +16,7 @@ class Chat extends Model<ChatAttributes, ChatCreationAttributes> implements Chat
   public createdAt!: Date;
   public updatedAt!: Date;
 
-  public participants?: User[];
-  public lastMessage?: Message;
-  public addParticipants!: BelongsToManyAddAssociationsMixin<User, string>;
+  public addParticipants!: BelongsToManyAddAssociationsMixin<any, string>;
 }
 
 Chat.init(
@@ -34,12 +30,5 @@ Chat.init(
   },
   { tableName: "chats", sequelize, timestamps: true }
 );
-
-// Associations
-Chat.belongsToMany(User, { through: "ChatParticipants", as: "participants" });
-User.belongsToMany(Chat, { through: "ChatParticipants", as: "chats" });
-
-Chat.belongsTo(Message, { as: "lastMessage", foreignKey: "lastMessageId" });
-Message.hasOne(Chat, { as: "chat", foreignKey: "lastMessageId" });
 
 export default Chat;

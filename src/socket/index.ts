@@ -2,10 +2,10 @@ import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
 import { User } from "../models";
 import {
-  makeMarkeAsReadMessage,
+  markMessagesAsRead,
   sendMessage,
 } from "../controllers/chatController";
-import Message from "../models/Message";
+import {Message} from "../models";
 
 export const initSocket = (server: any) => {
   const io = new Server(server, {
@@ -63,7 +63,9 @@ export const initSocket = (server: any) => {
       isActive: true,
       undeliveredIds,
     });
-    triggerRefresh(io, user.id);
+    for (const userId in onlineUsers) {
+      triggerRefresh(io, userId);
+    }
 
     socket.join(user.id);
     socket.on("chatOpened", ({ receiverId }) => {
@@ -103,7 +105,7 @@ export const initSocket = (server: any) => {
     socket.on("readMessage", async (data) => {
       const userId = user.id;
       const { receiverId } = data;
-      const messageIds = await makeMarkeAsReadMessage(receiverId, userId);
+      const messageIds = await markMessagesAsRead(receiverId, userId);
       io.to(receiverId).emit("readMessagesid", messageIds);
       triggerRefresh(io, user.id, receiverId);
     });

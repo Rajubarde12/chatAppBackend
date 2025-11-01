@@ -6,6 +6,8 @@ import BlockedUserComplaint from "./BlockedUserComplaint";
 import SuspiciousActivity from "./SuspiciousActivity";
 import Warning from "./Warning";
 import FailedLoginAttempt from "./FailedLoginAttempt";
+import Chat from "./Chat";
+import Message from "./Message";
 
 // -------------------------
 // 🧩 User ↔ BlockedUser
@@ -61,9 +63,28 @@ User.hasMany(Warning, { foreignKey: "userId", as: "warnings" });
 FailedLoginAttempt.belongsTo(User, { foreignKey: "userId", as: "user" });
 User.hasMany(FailedLoginAttempt, { foreignKey: "userId", as: "failedAttempts" });
 
-// -------------------------
-// ✅ Export all models
-// -------------------------
+
+// 1️⃣ Chat ↔ User (many-to-many)
+Chat.belongsToMany(User, {
+  through: "ChatParticipants",
+  as: "participants",
+  foreignKey: "chatId",
+});
+User.belongsToMany(Chat, {
+  through: "ChatParticipants",
+  as: "chats",
+  foreignKey: "userId",
+});
+
+// 2️⃣ Chat ↔ Message (for last message)
+Chat.belongsTo(Message, { as: "lastMessage", foreignKey: "lastMessageId" });
+Message.hasOne(Chat, { as: "chatWithLastMessage", foreignKey: "lastMessageId" });
+
+// 3️⃣ Chat ↔ Message (for message history)
+Chat.hasMany(Message, { as: "messages", foreignKey: "chatId" });
+Message.belongsTo(Chat, { as: "parentChat", foreignKey: "chatId" });
+
+
 export {
   User,
   BlockedUser,
@@ -72,4 +93,6 @@ export {
   SuspiciousActivity,
   Warning,
   FailedLoginAttempt,
+  Message,
+  Chat
 };
