@@ -18,10 +18,6 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
-
-// Routes
-app.use('/api/admin/login',loginAdmin)
-app.use('/api/admin',adminProtec,AdminRoute)
 app.use("/api/users", userRoutes);
 app.use("/api/users/chats", chatRoutes);
 app.use("/api/users/mediaUpload", uploadRoute);

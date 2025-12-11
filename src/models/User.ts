@@ -1,5 +1,4 @@
-import { DataTypes, Model, Optional } from "sequelize";
-import bcrypt from "bcryptjs";
+import { DataTypes, Model, Optional, Op } from "sequelize";
 import sequelize from "../config/db";
 import { parsePhoneNumberFromString } from "libphonenumber-js";
 
@@ -8,7 +7,6 @@ interface UserAttributes {
   name: string;
   email?: string;
   mobileNumber: string;
-  password: string;
   role: "user" | "admin" | "SuperAdmin";
   avatar?: string;
   isActive: boolean;
@@ -20,6 +18,13 @@ interface UserAttributes {
   countryCode?: string;
   countryISO?: string;
   countryName?: string;
+
+  // OTP fields
+  otp?: string;
+  otpExpires?: Date;
+  isVerified: boolean;
+  lastOtpSent?: Date;
+  otpRetryCount: number;
 }
 
 interface UserCreationAttributes
@@ -38,6 +43,11 @@ interface UserCreationAttributes
     | "countryCode"
     | "countryName"
     | "countryISO"
+    | "otp"
+    | "otpExpires"
+    | "isVerified"
+    | "lastOtpSent"
+    | "otpRetryCount"
   > {}
 
 class User
@@ -48,23 +58,78 @@ class User
   public name!: string;
   public email?: string;
   public mobileNumber!: string;
-  public password!: string;
   public role!: "user" | "admin" | "SuperAdmin";
   public avatar?: string;
   public isActive!: boolean;
   public lastLogin?: Date;
-  public readonly createdAt!: Date;
-  public readonly updatedAt!: Date;
+  public readonly createdAt?: Date;
+  public readonly updatedAt?: Date;
   public bio?: string;
   public isDisabled?: boolean;
   public countryCode?: string;
   public countryISO?: string;
   public countryName?: string;
 
-  public async matchPassword(enteredPassword: string): Promise<boolean> {
-    return await bcrypt.compare(enteredPassword, this.password);
+  // OTP fields
+  public otp?: string;
+  public otpExpires?: Date;
+  public isVerified!: boolean;
+  public lastOtpSent?: Date;
+  public otpRetryCount!: number;
+
+  // --------------------------
+  // ✅ Instance Methods
+  // --------------------------
+
+  public async validateOtp(enteredOtp: string): Promise<boolean> {
+    if (!this.otp || !this.otpExpires) return false;
+
+    const now = new Date();
+    if (now > this.otpExpires) return false;
+
+    return this.otp === enteredOtp;
+  }
+
+  public canResendOtp(): boolean {
+    if (!this.lastOtpSent) return true;
+
+    const now = new Date();
+    const lastSent = new Date(this.lastOtpSent);
+    const cooldownSeconds = 60; // 1-minute cooldown
+
+    return (now.getTime() - lastSent.getTime()) / 1000 >= cooldownSeconds;
+  }
+
+  public isOtpBlocked(): boolean {
+    return this.otpRetryCount >= 5; // Block after 5 failed attempts
+  }
+
+  public resetOtpRetryCount(): void {
+    this.otpRetryCount = 0;
+  }
+
+  public incrementOtpRetryCount(): void {
+    this.otpRetryCount += 1;
+  }
+
+  // --------------------------
+  // ✅ Static Methods
+  // --------------------------
+
+  public static generateOtp(): string {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  public static getOtpExpiration(): Date {
+    const expires = new Date();
+    expires.setMinutes(expires.getMinutes() + 10); // 10 minutes
+    return expires;
   }
 }
+
+// --------------------------
+// ✅ Model Initialization
+// --------------------------
 
 User.init(
   {
@@ -73,16 +138,27 @@ User.init(
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
     },
-    name: { type: DataTypes.STRING(50), allowNull: false },
+    name: {
+      type: DataTypes.STRING(50),
+      allowNull: false,
+    },
     email: {
       type: DataTypes.STRING(100),
       allowNull: true,
-      unique: { name: "uniq_email", msg: "Email Number akready have" },
+      unique: {
+        name: "uniq_email",
+        msg: "Email already exists",
+      },
+      validate: {
+        isEmail: {
+          msg: "Please provide a valid email address",
+        },
+      },
     },
     countryISO: {
       type: DataTypes.STRING(5),
       allowNull: true,
-      defaultValue: "IN", // fallback
+      defaultValue: "IN",
     },
     countryName: {
       type: DataTypes.STRING(100),
@@ -97,12 +173,15 @@ User.init(
     mobileNumber: {
       type: DataTypes.STRING(20),
       allowNull: false,
-      unique: { name: "uniq_mobileNumber", msg: "Mobile Number akready have" },
+      unique: {
+        name: "uniq_mobileNumber",
+        msg: "Mobile Number already exists",
+      },
       validate: {
         isValidPhone(value: string) {
           const countryCode = (this as any).countryCode || "+91";
           const phoneNumber = parsePhoneNumberFromString(
-            `+${countryCode.replace("+", "")}${value}`
+            value.startsWith("+") ? value : `${countryCode}${value}`
           );
 
           if (!phoneNumber || !phoneNumber.isValid()) {
@@ -113,32 +192,87 @@ User.init(
         },
       },
     },
-    password: { type: DataTypes.STRING(255), allowNull: false },
     role: {
       type: DataTypes.ENUM("user", "admin", "SuperAdmin"),
       defaultValue: "user",
     },
-    avatar: { type: DataTypes.STRING(255), defaultValue: "" },
-    isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
-    lastLogin: { type: DataTypes.DATE, allowNull: true },
-    bio: { type: DataTypes.STRING(255), defaultValue: "" },
-    isDisabled: { type: DataTypes.BOOLEAN, defaultValue: false },
+    avatar: {
+      type: DataTypes.STRING(255),
+      defaultValue: "",
+    },
+    isActive: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+    },
+    lastLogin: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    bio: {
+      type: DataTypes.STRING(255),
+      defaultValue: "",
+    },
+    isDisabled: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+
+    // --------------------------
+    // OTP Fields
+    // --------------------------
+    otp: {
+      type: DataTypes.STRING(6),
+      allowNull: true,
+      comment: "6-digit OTP",
+    },
+    otpExpires: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: "OTP expiration time",
+    },
+    isVerified: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      comment: "Whether user has verified their mobile/email",
+    },
+    lastOtpSent: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: "Last time OTP was sent",
+    },
+    otpRetryCount: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      validate: {
+        min: 0,
+        max: 5,
+      },
+      comment: "Number of failed OTP attempts",
+    },
   },
   {
     sequelize,
     tableName: "users",
     hooks: {
       beforeCreate: async (user: User) => {
-        const salt = await bcrypt.genSalt(10);
-        user.password = await bcrypt.hash(user.password, salt);
+        if (user.otpRetryCount == null) user.otpRetryCount = 0;
+        if (user.isVerified == null) user.isVerified = false;
       },
       beforeUpdate: async (user: User) => {
-        if (user.changed("password")) {
-          const salt = await bcrypt.genSalt(10);
-          user.password = await bcrypt.hash(user.password, salt);
-        }
+        // You can handle OTP expiration logic here if needed
       },
     },
+    indexes: [
+      {
+        fields: ["otp", "otpExpires"],
+        where: {
+          otp: { [Op.ne]: null },
+        },
+      },
+      {
+        fields: ["lastOtpSent"],
+      },
+    ],
   }
 );
 

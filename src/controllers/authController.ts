@@ -70,243 +70,104 @@ export const detectCountryAndPhoneMeta = (req: Request, res: Response) => {
   }
 };
 
-export const registerUser = async (
-  req: CountryCodeRequest,
-  res: Response
-): Promise<void> => {
+export const sendOtp = async (req: Request, res: Response) => {
   try {
-    const { name, email, password, role, mobileNumber } = req.body;
-    const conditions: any[] = [];
-    const { countryCode, countryISO, countryName } = req;
+    const { mobileNumber, countryCode = "+91" } = req.body || {};
 
-    if (email) {
-      conditions.push({ email });
+    if (!mobileNumber) {
+      return res.status(400).json({ error: "Mobile number is required" });
+    }
+    let user = await User.findOne({ where: { mobileNumber, countryCode } });
+    if (!user) {
+      user = await User.create({ name: "New User", mobileNumber, countryCode });
+    }
+    if (user.isOtpBlocked()) {
+      return res.status(429).json({
+        error: "Too many failed OTP attempts. Please try again later.",
+      });
     }
 
-    if (mobileNumber) {
-      conditions.push({ mobileNumber });
+    if (!user.canResendOtp()) {
+      return res.status(429).json({
+        message: "Please wait before requesting a new OTP.",
+      });
     }
+    const otp = User.generateOtp();
+    const otpExpires = User.getOtpExpiration();
 
-    const userExists = await User.findOne({
-      where: {
-        [Op.or]: conditions,
-      },
-    });
-    if (userExists) {
-      res.status(400).json({ message: "User already exists", status: false });
-      return;
-    }
-    if (!name || !password || !mobileNumber) {
-      res
-        .status(442)
-        .json({ message: "All Fields are required", status: false });
-      return;
-    }
+    user.otp = otp;
+    user.otpExpires = otpExpires;
+    user.lastOtpSent = new Date();
+    user.otpRetryCount = 0; // reset retry count
 
-    const user = await User.create({
-      name,
-      email,
-      password: password,
-      role: "user",
-      mobileNumber,
-      countryCode,
-      countryName,
-      countryISO,
-    });
+    await user.save();
+    console.log(`📲 OTP for ${mobileNumber}: ${otp}`);
 
-    res.status(201).json({
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        mobileNumber: `${user.countryCode}${user.mobileNumber}`,
-        isDisabled: user.isDisabled,
-        avatar: user.avatar,
-        countryISO: user.countryISO,
-        countryName: user.countryName,
-      },
-      token: generateToken(user.id.toString()),
-      status: true,
-      message: "User registered successfully",
+    return res.status(200).json({
+      message: "OTP sent successfully",
+      expiresIn: "10 minutes",
+      otp,
     });
   } catch (error: any) {
-    res.status(500).json({ message: error.message, status: false });
+    console.error("Send OTP Error:", error);
+    return res.status(500).json({ message: error.message });
   }
 };
 
-export const loginUser = async (req: Request, res: Response): Promise<void> => {
+export const verifyOtp = async (req: Request, res: Response) => {
   try {
-    const { email, password } = req.body;
-    const adminKey = req.headers.authorization;
+    const { mobileNumber, countryCode = "+91", otp } = req.body;
 
-    const user = await User.findOne({ where: { email } });
+    if (!mobileNumber || !otp) {
+      return res
+        .status(400)
+        .json({ error: "Mobile number and OTP are required" });
+    }
+
+    const user = await User.findOne({ where: { mobileNumber, countryCode } });
 
     if (!user) {
-      res
-        .status(401)
-        .json({ message: "Invalid email or password", status: false });
-      return;
-    }
-    if (user.isDisabled) {
-      // Check if disabled due to suspicious activity
-      const suspiciousActivity = await SuspiciousActivity.findOne({
-        where: { userId: user.id },
-        order: [["createdAt", "DESC"]],
-      });
-      const blockRecord = await BlockedUser.findOne({
-        where: { userId: user?.id },
-        order: [["createdAt", "DESC"]], // 👈 latest record first
-      });
-      if (blockRecord?.actionTaken == "permanentBan" && blockRecord.isBlocked) {
-        res.status(200).json({
-          message: "Your Blocked permanenlty please contect admin support!",
-          reason: blockRecord.reason,
-          status: false,
-        });
-        return;
-      }
-      if (blockRecord?.actionTaken == "temporaryBan" && blockRecord.isBlocked) {
-        res.status(200).json({
-          message: "Your Blocked  please contect admin support!",
-          reason: blockRecord.reason,
-          status: false,
-        });
-        return;
-      }
-
-      if (suspiciousActivity) {
-        const type = suspiciousActivity.type;
-        switch (type) {
-          case "loginAnomaly":
-            res.status(403).json({
-              message:
-                "Your account has been temporarily locked due to multiple failed login attempts.",
-              reason:
-                "Too many incorrect password attempts detected. Please try again later.",
-              status: false,
-            });
-            return;
-
-          case "massReports":
-            res.status(403).json({
-              message:
-                "Your account is under review due to multiple reports from users.",
-              reason:
-                "Mass user reports detected. Please wait for admin review.",
-              status: false,
-            });
-            return;
-
-          case "spam":
-            res.status(403).json({
-              message:
-                "Your account has been temporarily restricted for suspicious messaging activity.",
-              reason: "Possible spam or automated behavior detected.",
-              status: false,
-            });
-            return;
-
-          default:
-            res.status(403).json({
-              message:
-                "Your account is temporarily restricted due to suspicious activity.",
-              reason: "Please contact support or wait for admin review.",
-              status: false,
-            });
-            return;
-        }
-      }
-
-      // Otherwise check if blocked manually by admin
-      const blockedRecord = await BlockedUser.findOne({
-        where: { userId: user.id, isBlocked: true },
-        order: [["blockedAt", "DESC"]],
-        attributes: ["reason", "reasonCategory", "actionTaken", "blockedAt"],
-      });
-
-      if (blockedRecord) {
-        res.status(403).json({
-          message: "You are blocked by admin.",
-          reason: blockedRecord.reason,
-          category: blockedRecord.reasonCategory,
-          actionTaken: blockedRecord.actionTaken,
-          blockedAt: blockedRecord.blockedAt,
-          status: false,
-        });
-        return;
-      }
-
-      // Fallback: Generic block message
-      res.status(403).json({
-        message: "Your account is currently disabled.",
-        reason: "Please contact support for further details.",
-        status: false,
-      });
-      return;
+      return res.status(404).json({ error: "User not found" });
     }
 
-    const isMatch = await user.matchPassword(password);
+    // If OTP expired or invalid
+    const isValid = await user.validateOtp(otp);
 
-    if (!isMatch) {
-      FailedLoginAttempt.create({
-        userId: user.id,
-        ipAddress: req.ip,
-        userAgent: req.headers["user-agent"],
-      });
-      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
-      const failedCount = await FailedLoginAttempt.count({
-        where: {
-          userId: user.id,
-          createdAt: { [Op.gte]: tenMinutesAgo },
-        },
-      });
-      if (failedCount >= 5) {
-        // Mark suspicious activity
-        await SuspiciousActivity.create({
-          userId: user.id,
-          type: "loginAnomaly",
-          details: JSON.stringify({ failedCount, period: "10min" }),
-          status: "actionTaken",
+    if (!isValid) {
+      user.incrementOtpRetryCount();
+      await user.save();
+
+      if (user.isOtpBlocked()) {
+        return res.status(429).json({
+          error: "Too many failed attempts. Please try again later.",
         });
-        user.isDisabled = true;
-        await user.save();
-        res.status(403).json({
-          message:
-            "Multiple failed login attempts detected. Account temporarily locked.",
-          status: false,
-        });
-        return;
       }
 
-      res
-        .status(401)
-        .json({ message: "Invalid email or password", status: false });
-      return;
+      return res.status(400).json({ error: "Invalid or expired OTP" });
     }
-    if (user.avatar) {
-      const BASE_URL = `${req.protocol}://${req.get("host")}`;
-      user.avatar = `${BASE_URL}/${user.avatar}`;
-    }
-    const userData = {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      avatar: user.avatar,
-      status: user.isActive,
-      lastLogin: user.lastLogin,
-    };
-    res.json({
-      status: true,
-      message: "User logged in successfully",
-      token: generateToken(user.id.toString()),
-      user: userData,
+
+    // ✅ OTP is valid — mark as verified
+    user.isVerified = true;
+    user.otp = "";
+    user.otpExpires = undefined;
+    user.otpRetryCount = 0;
+    await user.save();
+
+    return res.status(200).json({
+      message: "OTP verified successfully",
+      user: {
+        id: user.id,
+        mobileNumber: user.mobileNumber,
+        isVerified: user.isVerified,
+        token: generateToken(user.id.toString()),
+      },
     });
   } catch (error: any) {
-    res.status(500).json({ message: error.message });
+    console.error("Verify OTP Error:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
   }
 };
+
 export const userProfile = async (
   req: AuthRequest,
   res: Response
@@ -335,13 +196,6 @@ export const getUsers = async (
   try {
     const currentUserId = req.user?.id;
     const users = await getUserListWithLastMessage(currentUserId, true);
-
-    // const users = await User.findAll({
-    //   where: {
-    //     id: { [Op.ne]: currentUserId }, // exclude current user
-    //   },
-    //   attributes: { exclude: ["password"] }, // don't return password
-    // });
 
     res.status(200).json({ users, status: true, message: "success" });
   } catch (error: any) {
@@ -375,39 +229,6 @@ export const checkUserOnline = async (req: AuthRequest, res: Response) => {
   }
 };
 
-export const updatePassword = async (req: AuthRequest, res: Response) => {
-  try {
-    const { user } = req;
-    const { oldPassword, newPassword } = req.body;
-    console.log(req.body);
-
-    if (!user) {
-      res.status(404).json({ message: "No user found!", status: false });
-      return;
-    }
-
-    // Check if old password matches
-    const isMatch = await user.matchPassword(oldPassword);
-    if (!isMatch) {
-      res
-        .status(400)
-        .json({ message: "Old password is incorrect", status: false });
-      return;
-    }
-
-    // Update to new password
-    user.password = newPassword;
-    await user.save();
-
-    res
-      .status(200)
-      .json({ message: "Password updated successfully", status: true });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Something went wrong!", status: false });
-  }
-};
-
 export const updateUserProfile = async (req: AuthRequest, res: Response) => {
   try {
     const { user } = req;
@@ -432,5 +253,38 @@ export const updateUserProfile = async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Something went wrong!", status: false });
+  }
+};
+
+export const uploadProfimeImageContorller = async (
+  req: AuthRequest,
+  res: Response
+) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        status: false,
+        message: "No file uploaded",
+      });
+    }
+    const user = req?.user;
+    if (!user) {
+      res.status(400).json({stauts:false, message: "Not Autorized!" });
+      return;
+    }
+    user.avatar = req.file.path;
+    await user.save();
+
+    return res.status(200).json({
+      status: true,
+      message: "Profile image uploaded successfully",
+      avtar: user.avatar,
+    });
+  } catch (error: any) {
+    console.error("Upload Error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Something went wrong",
+    });
   }
 };
