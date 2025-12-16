@@ -24,16 +24,15 @@ const storage = multer.diskStorage({
     let folderPath = "uploads/";
 
     // 📁 Define by upload type
-  
-      // Identify attachment type by MIME
-      if (file.mimetype.startsWith("image/")) {
-        folderPath = "uploads/attachments/images";
-      } else if (file.mimetype.startsWith("video/")) {
-        folderPath = "uploads/attachments/videos";
-      } else {
-        folderPath = "uploads/attachments/files";
-      }
-    
+
+    // Identify attachment type by MIME
+    if (file.mimetype.startsWith("image/")) {
+      folderPath = "uploads/attachments/images";
+    } else if (file.mimetype.startsWith("video/")) {
+      folderPath = "uploads/attachments/videos";
+    } else {
+      folderPath = "uploads/attachments/files";
+    }
 
     // 🧱 Ensure path exists
     ensureDirExists(folderPath);
@@ -66,11 +65,7 @@ const fileFilter = (
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   ];
 
-  if (allowedTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error("Unsupported file type"));
-  }
+  cb(null, true);
 };
 
 // 🚀 Export upload middleware

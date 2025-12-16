@@ -1,18 +1,13 @@
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
 import { User } from "../models";
-import {
-  markMessagesAsRead,
-  sendMessage,
-} from "../controllers/chatController";
-import {Message} from "../models";
+import { markMessagesAsRead, sendMessage } from "../controllers/chatController";
+import { Message } from "../models";
 
 export const initSocket = (server: any) => {
   const io = new Server(server, {
     cors: { origin: "*", methods: ["GET", "POST"] },
   });
-
-  // 🔑 Authentication Middleware
   io.use(async (socket, next) => {
     try {
       const token = socket.handshake.auth.token;
@@ -21,7 +16,6 @@ export const initSocket = (server: any) => {
       const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as {
         id: string;
       };
-      // const user = await User.findById(decoded.id).select("-password");
       const user = await User.findByPk(decoded.id, {
         attributes: { exclude: ["password"] },
       });
@@ -75,7 +69,13 @@ export const initSocket = (server: any) => {
       activeChats[user.id] = null;
       console.log(`❌ ${user.id} closed chat`);
     });
+    socket.on("userListOpened", () => {
+      activeUserLists[user.id] = true;
+    });
 
+    socket.on("userListClosed", () => {
+      activeUserLists[user.id] = false;
+    });
     socket.on("sendMessage", async (data) => {
       try {
         const { chatId, receiverId, message, messageType, attachments } = data;
@@ -90,14 +90,13 @@ export const initSocket = (server: any) => {
 
         socket.to(receiverId).emit("newMessage", newMessage);
         triggerRefresh(io, user.id, receiverId);
-
-        // 4️⃣ Emit ack to sender
         if (activeChats[receiverId] !== user.id) {
           socket
             .to(receiverId)
             .emit("pushNotification", { newMessage, User: user });
         }
         socket.emit("messageSent", newMessage);
+          io.to(user.id).emit("refreshUserList");
       } catch (err) {
         console.error("Error sending message:", err);
       }
@@ -127,9 +126,13 @@ export const initSocket = (server: any) => {
   });
 };
 const triggerRefresh = (io: Server, senderId: string, receiverId?: string) => {
-  io.to(senderId).emit("refreshUserList", true);
-  if (receiverId) io.to(receiverId).emit("refreshUserList", true);
+for (const uid in activeUserLists) {
+    if (activeUserLists[uid]) {
+      io.to(uid).emit("refreshUserList");
+    }
+  }
 };
 
 const onlineUsers: Record<string, string> = {};
 const activeChats: Record<string, string | null> = {};
+const activeUserLists: Record<string, boolean> = {};
